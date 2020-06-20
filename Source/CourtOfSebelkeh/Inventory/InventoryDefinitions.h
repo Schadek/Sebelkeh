@@ -40,6 +40,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		TSubclassOf<UCoreDamageType> DamageClass = UCoreDamageType::StaticClass();
 
+	bool operator==(const FWeaponDefinition& Rhs) const;
+
 };
 
 UCLASS(BlueprintType)

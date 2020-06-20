@@ -8,6 +8,8 @@
 #include "CourtOfSebelkeh/Components/Meta/ActorMetaComponent.h"
 #include "CourtOfSebelkeh/Damage/DamageSystem.h"
 #include "CourtOfSebelkeh/Buffs/BuffSystemDefinitions.h"
+#include "CourtOfSebelkeh/Skills/Utility/AreaOfEffectActor.h"
+#include "CourtOfSebelkeh/Projectiles/Projectile.h"
 #include "Runtime/Engine/Public/WorldCollision.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -27,16 +29,17 @@ FLinearColor UCoreBlueprintLibrary::GetActorFactionColor(AActor* Target)
 	{
 		if (UUISettings* UISettings = Cast<ACoreGameState>(Target->GetWorld()->GetGameState())->GetUISettings())
 		{
-			EFactionState State = GetActorFactionState(Target);
+			ESkillTarget State = GetActorFactionState(Target);
 			switch (State)
 			{
-			case EFactionState::Ally:
+			case ESkillTarget::Ally:
+			case ESkillTarget::Self:
 				return UISettings->AllyFactionColor;
-			case EFactionState::Enemy:
+			case ESkillTarget::Enemy:
 				return UISettings->EnemyFactionColor;
-			case EFactionState::Neutral:
+			case ESkillTarget::Neutral:
 				return UISettings->NeutralFactionColor;
-			case EFactionState::Passive:
+			case ESkillTarget::Passive:
 				return UISettings->PassiveFactionColor;
 			}
 		}
@@ -46,7 +49,7 @@ FLinearColor UCoreBlueprintLibrary::GetActorFactionColor(AActor* Target)
 	return FLinearColor(1.f, 0, 1.f);
 }
 
-FLinearColor UCoreBlueprintLibrary::GetFactionColorByState(UObject* WorldContextObject, EFactionState State)
+FLinearColor UCoreBlueprintLibrary::GetFactionColorByState(UObject* WorldContextObject, ESkillTarget State)
 {
 	if (WorldContextObject)
 	{
@@ -54,13 +57,14 @@ FLinearColor UCoreBlueprintLibrary::GetFactionColorByState(UObject* WorldContext
 		{
 			switch (State)
 			{
-			case EFactionState::Ally:
+			case ESkillTarget::Ally:
+			case ESkillTarget::Self:
 				return UISettings->AllyFactionColor;
-			case EFactionState::Enemy:
+			case ESkillTarget::Enemy:
 				return UISettings->EnemyFactionColor;
-			case EFactionState::Neutral:
+			case ESkillTarget::Neutral:
 				return UISettings->NeutralFactionColor;
-			case EFactionState::Passive:
+			case ESkillTarget::Passive:
 				return UISettings->PassiveFactionColor;
 			}
 		}
@@ -88,15 +92,20 @@ FLinearColor UCoreBlueprintLibrary::GetBuffTypeColor(UBuff* Buff)
 	return FLinearColor::Red;
 }
 
-EFactionState UCoreBlueprintLibrary::GetActorFactionState(AActor* Target)
+ESkillTarget UCoreBlueprintLibrary::GetActorFactionState(AActor* Target)
 {
 	return GetActorFactionStateRelativeTo(UGameplayStatics::GetPlayerPawn(Target, 0), Target);
 }
 
-EFactionState UCoreBlueprintLibrary::GetActorFactionStateRelativeTo(AActor* Origin, AActor* Target)
+ESkillTarget UCoreBlueprintLibrary::GetActorFactionStateRelativeTo(AActor* Origin, AActor* Target)
 {
 	if (Target && Origin)
 	{
+		if (Origin == Target)
+		{
+			return ESkillTarget::Self;
+		}
+
 		if (UGameSettings* GameSettings = Cast<ACoreGameState>(Target->GetWorld()->GetGameState())->GetGameSettings())
 		{
 			if (UActorMetaComponent* MetaComponent = Cast<UActorMetaComponent>(Target->GetComponentByClass(UActorMetaComponent::StaticClass())))
@@ -107,32 +116,32 @@ EFactionState UCoreBlueprintLibrary::GetActorFactionStateRelativeTo(AActor* Orig
 					const uint8 OwnFaction = OwnMetaComponent->GetFaction();
 					if (OwnFaction == OtherFaction)
 					{
-						return EFactionState::Ally;
+						return ESkillTarget::Ally;
 					}
 					else if (OtherFaction == GameSettings->PassiveFaction)
 					{
-						return EFactionState::Passive;
+						return ESkillTarget::Passive;
 					}
 					else if (OtherFaction == GameSettings->NeutralFaction)
 					{
-						return EFactionState::Neutral;
+						return ESkillTarget::Neutral;
 					}
 					else
 					{
-						return EFactionState::Enemy;
+						return ESkillTarget::Enemy;
 					}
 				}
 
-				return EFactionState::Neutral;
+				return ESkillTarget::Neutral;
 			}
 		}
 	}
 
 	//Magenta to make things obviously ugly
-	return EFactionState::Neutral;
+	return ESkillTarget::Neutral;
 }
 
-UUISettings* UCoreBlueprintLibrary::GetUISettings(UObject* WorldContextObject)
+UUISettings* UCoreBlueprintLibrary::GetUISettings(const UObject* WorldContextObject)
 {
 	if (WorldContextObject)
 	{
@@ -145,7 +154,7 @@ UUISettings* UCoreBlueprintLibrary::GetUISettings(UObject* WorldContextObject)
 	return nullptr;
 }
 
-UGameSettings* UCoreBlueprintLibrary::GetGameSettings(UObject* WorldContextObject)
+UGameSettings* UCoreBlueprintLibrary::GetGameSettings(const UObject* WorldContextObject)
 {
 	if (WorldContextObject)
 	{
@@ -158,7 +167,7 @@ UGameSettings* UCoreBlueprintLibrary::GetGameSettings(UObject* WorldContextObjec
 	return nullptr;
 }
 
-float UCoreBlueprintLibrary::GetRangeFromPreset(UObject* WorldContextObject, ERangePreset Preset)
+float UCoreBlueprintLibrary::GetRangeFromPreset(const UObject* WorldContextObject, ERangePreset Preset)
 {
 	if (Preset != ERangePreset::None)
 	{
@@ -168,11 +177,11 @@ float UCoreBlueprintLibrary::GetRangeFromPreset(UObject* WorldContextObject, ERa
 	return 0.0f;
 }
 
-TArray<AActor*> UCoreBlueprintLibrary::FilterActorsByFaction(UObject* WorldContextObject, AActor* Origin, const TArray<AActor*>& Targets, const TArray<ESkillTarget>& PossibleTargets)
+TArray<AActor*> UCoreBlueprintLibrary::FilterActorsByFaction(UObject* WorldContextObject, AActor* Origin, const TArray<AActor*>& Targets, int32 PossibleTargestMask)
 {
 	TArray<AActor*> FilteredActors;
 
-	bool bIncludeSelf = Origin && PossibleTargets.Contains(ESkillTarget::Self);
+	bool bIncludeSelf = (Origin && (1 << ESkillTarget::Ally)) != 0;
 
 	for (AActor* Target : Targets)
 	{
@@ -183,7 +192,7 @@ TArray<AActor*> UCoreBlueprintLibrary::FilterActorsByFaction(UObject* WorldConte
 		}
 
 		ESkillTarget FactionState = static_cast<ESkillTarget>(UCoreBlueprintLibrary::GetActorFactionStateRelativeTo(Origin, Target));
-		if (PossibleTargets.Contains(FactionState))
+		if ((PossibleTargestMask & (1 << FactionState)) != 0)
 		{
 			FilteredActors.Add(Target);
 		}
@@ -192,13 +201,46 @@ TArray<AActor*> UCoreBlueprintLibrary::FilterActorsByFaction(UObject* WorldConte
 	return FilteredActors;
 }
 
-void UCoreBlueprintLibrary::DealAreaDamage(UObject* WorldContextObject, AActor* Origin, const TArray<ESkillTarget>& PossibleTargets, const FVector& Location, float Radius, const FDamageInfo& DamageInfo)
+void UCoreBlueprintLibrary::DealAreaDamage(UObject* WorldContextObject, AActor* Origin, int32 PossibleTargetsMask, const FVector& Location, float Radius, const TArray<AActor*>& ActorsToIgnore, const FDamageInfo& DamageInfo)
 {
-	if (!WorldContextObject)
-		return;
-
 	ACoreGameState* GameState = Cast<ACoreGameState>(WorldContextObject->GetWorld()->GetGameState());
 	if (!GameState)
+		return;
+
+	UDamageSystem* DamageSystem = GameState->GetDamageSystem();
+	if (!DamageSystem)
+		return;
+
+	TArray<AActor*> Targets;
+	GetValidTargetsInArea(WorldContextObject, Origin, PossibleTargetsMask, Location, Radius, ActorsToIgnore, Targets);
+
+	FDamageInfo Info = DamageInfo;
+	for (AActor* Target : Targets)
+	{
+		Info.Target = Target;
+		DamageSystem->ProcessDamage(Info);
+	}
+}
+
+AAreaOfEffectActor* UCoreBlueprintLibrary::SpawnAreaActor(UObject* WorldContextObject, const FTransform& Transform, const int32 PossibleTargetsMask, AActor* Owner, float Radius, float TickInterval /*= -1.f*/)
+{
+	if (AAreaOfEffectActor* AOEActor = WorldContextObject->GetWorld()->SpawnActorDeferred<AAreaOfEffectActor>(GetGameSettings(WorldContextObject)->AreaOfEffectActorClass, Transform))
+	{
+		AOEActor->SetTimeInterval(TickInterval);
+		AOEActor->SetValidTargets(PossibleTargetsMask);
+		AOEActor->SetOwner(Owner);
+		AOEActor->SetShape(Radius);
+		UGameplayStatics::FinishSpawningActor(AOEActor, Transform);
+
+		return AOEActor;
+	}
+
+	return nullptr;
+}
+
+void UCoreBlueprintLibrary::GetValidTargetsInArea(UObject* WorldContextObject, AActor* Origin, int32 PossibleTargetsMask, const FVector& Location, float Radius, const TArray<AActor*>& ActorsToIgnore, TArray<AActor*>& OutActors)
+{
+	if (!WorldContextObject)
 		return;
 
 	TArray<FOverlapResult> Results;
@@ -213,15 +255,52 @@ void UCoreBlueprintLibrary::DealAreaDamage(UObject* WorldContextObject, AActor* 
 	TArray<AActor*> Targets;
 	for (const FOverlapResult& Result : Results)
 	{
-		Targets.Add(Result.GetActor());
+		AActor* Actor = Result.GetActor();
+		if (!ActorsToIgnore.Contains(Actor))
+			Targets.AddUnique(Actor);
 	}
 
-	UDamageSystem* DamageSystem = GameState->GetDamageSystem();
-	TArray<AActor*> FilteredTargets = FilterActorsByFaction(WorldContextObject, Origin, Targets, PossibleTargets);
-	FDamageInfo Info = DamageInfo;
-	for (AActor* Target : FilteredTargets)
+	OutActors = FilterActorsByFaction(WorldContextObject, Origin, Targets, PossibleTargetsMask);
+}
+
+void UCoreBlueprintLibrary::GetAllPropertyNames(UObject* Object, TArray<FName>& OutNames)
+{
+	if (!Object)
+		return;
+
+
+	for (TFieldIterator<FProperty> Prop(Object->GetClass()); Prop; ++Prop)
 	{
-		Info.Target = Target;
-		DamageSystem->ProcessDamage(Info);
+		const FName Name = Prop->GetFName();
+		OutNames.Add(Name);
 	}
+}
+
+void UCoreBlueprintLibrary::ExpandSkillTargetMask(int32 PossibleTargestMask, TArray<TEnumAsByte<ESkillTarget>>& OutTargets)
+{
+	if ((PossibleTargestMask & (1 << static_cast<uint8>(ESkillTarget::Ally))) != 0)
+	{
+		OutTargets.Add(ESkillTarget::Ally);
+	}
+	if ((PossibleTargestMask & (1 << static_cast<uint8>(ESkillTarget::Enemy))) != 0)
+	{
+		OutTargets.Add(ESkillTarget::Enemy);
+	}
+	if ((PossibleTargestMask & (1 << static_cast<uint8>(ESkillTarget::Passive))) != 0)
+	{
+		OutTargets.Add(ESkillTarget::Passive);
+	}
+	if ((PossibleTargestMask & (1 << static_cast<uint8>(ESkillTarget::Neutral))) != 0)
+	{
+		OutTargets.Add(ESkillTarget::Neutral);
+	}
+	if ((PossibleTargestMask & (1 << static_cast<uint8>(ESkillTarget::Self))) != 0)
+	{
+		OutTargets.Add(ESkillTarget::Self);
+	}
+}
+
+AProjectile* UCoreBlueprintLibrary::SpawnProjectile(UObject* WorldContextObject, TSubclassOf<AProjectile> Class, AActor* Instigator, UObject* Owner, const FVector& Location)
+{
+	return AProjectile::SpawnProjectile(Class, Instigator, Owner, Location);
 }

@@ -4,6 +4,7 @@
 #include "ActorStateDefinitions.h"
 #include "CourtOfSebelkeh/Libraries/CoreBlueprintLibrary.h"
 #include "CourtOfSebelkeh/Components/State/ActorStateComponent.h"
+#include "CourtOfSebelkeh/Components/CallbackComponent.h"
 #include "CourtOfSebelkeh/Components/Skills/SkillComponent.h"
 #include "CourtOfSebelkeh/Components/Inventory/InventoryComponent.h"
 #include "CourtOfSebelkeh/Characters/CoreCharacter.h"
@@ -31,6 +32,12 @@ UWorld* UActorState::GetWorld() const
 }
 
 //////////////////////////////////////////////////////////////////////////
+void UChannelingActorState::SetEasilyInterruptable(UCallbackComponent* Callback)
+{
+	CallbackComponent = Callback;
+	CallbackComponent->RegisterCallback(ECallback::DamageReceived, this);
+}
+
 void UChannelingActorState::EnableEndOnMove()
 {
 	if (Character)
@@ -38,6 +45,14 @@ void UChannelingActorState::EnableEndOnMove()
 		FScriptDelegate Delegate;
 		Delegate.BindUFunction(this, "OnMovement");
 		Character->OnMovementInput.Add(Delegate);
+	}
+}
+
+void UChannelingActorState::OnDamageReceived_Implementation(const UCallbackComponent* Callback, const FDamageEventInfo& Info)
+{
+	if (Info.DamageInfo.Amount > 0)
+	{
+		OnMovement(nullptr);
 	}
 }
 
@@ -78,6 +93,11 @@ void UChannelingActorState::End(UActorState* NewState)
 	if (Character)
 	{
 		Character->OnMovement.RemoveAll(this);
+	}
+
+	if (CallbackComponent)
+	{
+		CallbackComponent->UnregisterCallback(ECallback::DamageReceived, this);
 	}
 }
 

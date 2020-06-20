@@ -25,18 +25,26 @@ public:
 	UFUNCTION(BlueprintCallable)
 		bool UnregisterCallback(ECallback Type, UObject* Listener);
 
+	void BroadcastCostCalculation(FCostCalculationEventInfo& Info);
 	void BroadcastPreDamageDealt(FDamageEventInfo& Info);
 	void BroadcastDamageDealt(const FDamageDealtEventInfo& Info);
 	void BroadcastPreDamageReceived(FDamageEventInfo& Info);
 	void BroadcastDamageReceived(const FDamageEventInfo& Info);
-	void BroadcastEnchantmentAdded(FBuffEventInfo& Info);
-	void BroadcastEnchantmentRemoved(FBuffEventInfo& Info);
-	void BroadcastHexAdded(FBuffEventInfo& Info);
-	void BroadcastHexRemoved(FBuffEventInfo& Info);
+	void BroadcastPreHealApplied(FPreDamageHealedEventInfo& Info);
+	void BroadcastHealApplied(const FDamageHealedEventInfo& Info);
+	void BroadcastPreHealReceived(FPreDamageHealedEventInfo& Info);
+	void BroadcastHealReceived(const FDamageHealedEventInfo& Info);
+	void BroadcastPreBuffApplied(FPreBuffAppliedEventInfo& Info);
+	void BroadcastPreBuffReceived(FPreBuffReceivedEventInfo& Info);
+	void BroadcastBuffAdded(const FBuffEventInfo& Info);
+	void BroadcastBuffRemoved(const FBuffEventInfo& Info);
 	void BroadcastStatChanged(const FStatEventInfo& Info);
 	void BroadcastSkillOnCooldown(FCooldownEventInfo& Info);
 	void BroadcastSkillChannel(FSkillChannelEventInfo& Info);
+	void BroadcastPreSkillUsed(FPreSkillUsedEventInfo& Info);
+	void BroadcastSkillUsed(const FSkillUsedEventInfo& Info);
 	void BroadcastPreActorStateChange(FPreActorStateEventInfo& Info);
+	void BroadcastActorStateChange(const FActorStateEventInfo& Info);
 
 protected:
 

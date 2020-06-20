@@ -40,7 +40,7 @@ void UBuffComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 			{
 				if (Buff->GetEndTimestamp() > 0 && Time >= Buff->GetEndTimestamp())
 				{
-					QueueBuffRemoval(Buff, EBuffEndReason::Expiration);
+					QueueBuffRemoval(Buff, EBuffEndReason::Expiration, nullptr, nullptr);
 				}
 				else if (Buff->WantsTick(Time))
 				{
@@ -124,48 +124,70 @@ void UBuffComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 	}
 }
 
-UBuff* UBuffComponent::AddBuff(TSubclassOf<UBuff> Class, AActor* Instigator, float Duration /* = -1.f*/)
+UBuff* UBuffComponent::AddBuff(TSubclassOf<UBuff> Class, AActor* Instigator, UObject* Source, float Duration /* = -1.f*/)
 {
 	if (!GetWorld()->IsServer())
 		return nullptr;
 
 	const int32 NewID = BuffIDCounter++;
 	const bool bIsInfinite = Duration < 0.0f;
-	const float EndTimeStamp = bIsInfinite ? -1.f : GetWorld()->GetTimeSeconds() + Duration;
 
 	UBuff* NewBuff = NewObject<UBuff>(this, Class);
+
+	if (UCallbackComponent* InstigatorCallback = Instigator->FindComponentByClass<UCallbackComponent>())
+	{
+		FPreBuffAppliedEventInfo PreBuffAppliedEventInfo;
+		PreBuffAppliedEventInfo.Buff = NewBuff;
+		PreBuffAppliedEventInfo.Duration = Duration;
+		PreBuffAppliedEventInfo.Instigator = Instigator;
+		PreBuffAppliedEventInfo.Source = Source;
+
+		InstigatorCallback->BroadcastPreBuffApplied(PreBuffAppliedEventInfo);
+		Duration = PreBuffAppliedEventInfo.Duration;
+	}
+
+	if (CallbackComponent)
+	{
+		FPreBuffReceivedEventInfo PreBuffReceivedEventInfo;
+		PreBuffReceivedEventInfo.Buff = NewBuff;
+		PreBuffReceivedEventInfo.Duration = Duration;
+		PreBuffReceivedEventInfo.Instigator = Instigator;
+		PreBuffReceivedEventInfo.Source = Source;
+
+		CallbackComponent->BroadcastPreBuffReceived(PreBuffReceivedEventInfo);
+		Duration = PreBuffReceivedEventInfo.Duration;
+	}
+
+	const float EndTimeStamp = bIsInfinite ? -1.f : GetWorld()->GetTimeSeconds() + Duration;
 	NewBuff->Begin(this, GetOwner(), Instigator, NewID, EndTimeStamp, bIsInfinite);
 
 	Buffs[static_cast<int32>(NewBuff->GetType())].Buffs.Add(NewBuff);
 	BuffTypeMap.Add(NewID, NewBuff->GetType());
 
 	UBuff* SecondStrongest = nullptr;
-	UBuff* StrongestBuff = GetStrongestBuffOfClass(Class, SecondStrongest);
+	UBuff* StrongestBuff = GetStrongestBuffOfClass(Class, SecondStrongest, NewBuff);
 	if (NewBuff == StrongestBuff)
 	{
 		//This is the second, stronger instance of the buff 
 		if (SecondStrongest && SecondStrongest->IsActive())
 		{
+			ActiveBuffAmount--;
 			SecondStrongest->Deactivate();
 		}
 
+		ActiveBuffAmount++;
 		NewBuff->Activate();
 	}
 
-	FBuffEventInfo Info;
-	Info.Buff = NewBuff;
 
 	if (CallbackComponent)
 	{
-		switch (NewBuff->GetType())
-		{
-		case EBuffType::Enchantment:
-			CallbackComponent->BroadcastEnchantmentAdded(Info);
-			break;
-		case EBuffType::Hex:
-			CallbackComponent->BroadcastHexAdded(Info);
-			break;
-		}
+		FBuffEventInfo Info;
+		Info.Buff = NewBuff;
+		Info.Instigator = Instigator;
+		Info.Source = Source;
+
+		CallbackComponent->BroadcastBuffAdded(Info);
 	}
 
 	switch (NewBuff->GetNetRelevancy())
@@ -177,6 +199,7 @@ UBuff* UBuffComponent::AddBuff(TSubclassOf<UBuff> Class, AActor* Instigator, flo
 		Data.ID = NewID;
 		Data.EndTimeStamp = EndTimeStamp;
 		Data.Instigator = Instigator;
+		Data.Source = Source;
 		break;
 	}
 	case EBuffRelevancy::All:
@@ -186,6 +209,7 @@ UBuff* UBuffComponent::AddBuff(TSubclassOf<UBuff> Class, AActor* Instigator, flo
 		Data.ID = NewID;
 		Data.EndTimeStamp = EndTimeStamp;
 		Data.Instigator = Instigator;
+		Data.Source = Source;
 		break;
 	}
 	default:
@@ -195,33 +219,69 @@ UBuff* UBuffComponent::AddBuff(TSubclassOf<UBuff> Class, AActor* Instigator, flo
 	return NewBuff;
 }
 
-void UBuffComponent::RemoveBuffByReference(UBuff* Buff)
+void UBuffComponent::RemoveBuffByReference(UBuff* Buff, AActor* Instigator, UObject* Source)
 {
-	RemoveAllBuffsOfType(Buff->GetClass());
+	RemoveAllBuffsOfType(Buff->GetClass(), Instigator, Source);
 }
 
-void UBuffComponent::RemoveBuff(int32 ID)
+bool UBuffComponent::RemoveBuffOfType(EBuffType Type, AActor* Instigator, UObject* Source, int32 Amount)
+{
+	TArray<UBuff*>& BuffArray = Buffs[static_cast<int32>(Type)].Buffs;
+	for (int i = 0; i < Amount; i++)
+	{
+		UBuff* Buff = nullptr;
+		for (int k = BuffArray.Num() - 1; k >= 0; k--)
+		{
+			if (!BuffArray[k]->IsDone())
+			{
+				Buff = BuffArray[k];
+				break;
+			}
+		}
+
+		if (!Buff)
+		{
+			break;
+		}
+
+		RemoveBuffByReference(Buff, Instigator, Source);
+	}
+
+	return Amount > 0;
+}
+
+void UBuffComponent::RemoveBuff(int32 ID, AActor* Instigator, UObject* Source)
 {
 	if (UBuff* Buff = GetBuffById(ID))
 	{
-		RemoveAllBuffsOfType(Buff->GetClass());
+		RemoveAllBuffsOfType(Buff->GetClass(), Instigator, Source);
 	}
 }
 
-void UBuffComponent::ClearAll()
+void UBuffComponent::ClearAll(AActor* Instigator, UObject* Source, int32& OutRemovedActiveBuffs, int32& OutRemovedBuffsTotal, TArray<UBuff*>& OutRemovedActiveBuffInstances)
 {
+	OutRemovedActiveBuffInstances.Reserve(10);
 	for (int i = 0; i < static_cast<int32>(EBuffType::Count); i++)
 	{
-		ClearAllOfType(static_cast<EBuffType>(i));
+		ClearAllOfType(static_cast<EBuffType>(i), Instigator, Source, OutRemovedActiveBuffs, OutRemovedBuffsTotal, OutRemovedActiveBuffInstances);
 	}
 }
 
-void UBuffComponent::ClearAllOfType(EBuffType Type)
+void UBuffComponent::ClearAllOfType(EBuffType Type, AActor* Instigator, UObject* Source, int32& OutRemovedActiveBuffs, int32& OutRemovedBuffsTotal, TArray<UBuff*>& OutRemovedActiveBuffInstances)
 {
+	OutRemovedActiveBuffInstances.Reserve(4);
+
 	TArray<UBuff*>& Array = Buffs[static_cast<int32>(Type)].Buffs;
 	for (int i = Array.Num() - 1; i >= 0; i--)
 	{
-		RemoveBuff(Array[i]->GetID());
+		if (Array[i]->IsActive())
+		{
+			OutRemovedActiveBuffInstances.Add(Array[i]);
+			OutRemovedActiveBuffs++;
+		}
+		OutRemovedBuffsTotal++;
+
+		RemoveBuff(Array[i]->GetID(), Instigator, Source);
 	}
 }
 
@@ -241,7 +301,17 @@ UBuff* UBuffComponent::GetBuffById(int32 ID) const
 	return nullptr;
 }
 
-UBuff* UBuffComponent::GetStrongestBuffOfClass(TSubclassOf<UBuff> Class, UBuff* SecondStrongest)
+int32 UBuffComponent::GetBuffAmount() const
+{
+	return ActiveBuffAmount;
+}
+
+int32 UBuffComponent::GetBuffAmountByType(EBuffType Type) const
+{
+	return Buffs[static_cast<int32>(Type)].Buffs.Num();
+}
+
+UBuff* UBuffComponent::GetStrongestBuffOfClass(TSubclassOf<UBuff> Class, UBuff*& SecondStrongest, UBuff* QueryOrigin)
 {
 	if (!Class)
 		return nullptr;
@@ -253,14 +323,22 @@ UBuff* UBuffComponent::GetStrongestBuffOfClass(TSubclassOf<UBuff> Class, UBuff* 
 
 	for (UBuff* Buff : Buffs[static_cast<int32>(DefaultObject->GetType())].Buffs)
 	{
-		if (Buff->GetClass() == Class)
+		if (Buff->GetClass() == Class && !Buff->IsDone())
 		{
 			int32 Strength = Buff->GetAttributeValue();
-			if (Strength > HighestAttribute)
+			if (Strength > HighestAttribute || (Strength == HighestAttribute && QueryOrigin == Buff))
 			{
-				SecondStrongest = Result;
+				if (!SecondStrongest || !SecondStrongest->IsActive())
+				{
+					SecondStrongest = Result;
+				}
+
 				Result = Buff;
 				HighestAttribute = Strength;
+			}
+			else if (!SecondStrongest || Buff->IsActive())
+			{
+				SecondStrongest = Buff;
 			}
 		}
 	}
@@ -268,7 +346,7 @@ UBuff* UBuffComponent::GetStrongestBuffOfClass(TSubclassOf<UBuff> Class, UBuff* 
 	return Result;
 }
 
-void UBuffComponent::RemoveAllBuffsOfType(TSubclassOf<UBuff> Class)
+void UBuffComponent::RemoveAllBuffsOfType(TSubclassOf<UBuff> Class, AActor* Instigator, UObject* Source)
 {
 	TArray<UBuff*> QualifiedBuffs;
 
@@ -283,11 +361,11 @@ void UBuffComponent::RemoveAllBuffsOfType(TSubclassOf<UBuff> Class)
 
 	for (UBuff* Buff : QualifiedBuffs)
 	{
-		QueueBuffRemoval(Buff, EBuffEndReason::Removal);
+		QueueBuffRemoval(Buff, EBuffEndReason::Removal, Instigator, Source);
 	}
 }
 
-void UBuffComponent::QueueBuffRemoval(int32 ID, EBuffEndReason Reason)
+void UBuffComponent::QueueBuffRemoval(int32 ID, EBuffEndReason Reason, AActor* Instigator, UObject* Source)
 {
 	if (!GetWorld()->IsServer())
 		return;
@@ -302,36 +380,32 @@ void UBuffComponent::QueueBuffRemoval(int32 ID, EBuffEndReason Reason)
 			if (Buff->GetID() == ID)
 			{
 				UBuff* SecondStrongest = nullptr;
-				UBuff* StrongestBuff = GetStrongestBuffOfClass(Buff->GetClass(), SecondStrongest);
+				UBuff* StrongestBuff = GetStrongestBuffOfClass(Buff->GetClass(), SecondStrongest, Buff);
 				if (Buff == StrongestBuff)
 				{
 					check(Buff->IsActive() && "Buff is not active, should never happen!");
+					ActiveBuffAmount--;
 					Buff->Deactivate();
 
-					if (SecondStrongest && SecondStrongest->IsActive())
+					if (SecondStrongest && !SecondStrongest->IsActive())
 					{
 						//This is the strongest instance of this buff but there is another one applied
+						ActiveBuffAmount++;
 						SecondStrongest->Activate();
 					}
 				}
 
-				Buff->End(Reason);
+				Buff->End(Reason, SecondStrongest != nullptr);
 				Buff->MarkForDestroy();
 				BuffsMarkedForDestruction.Add(Buff);
 
-				FBuffEventInfo Info;
-				Info.Buff = Buff;
 				if (CallbackComponent)
 				{
-					switch (Buff->GetType())
-					{
-					case EBuffType::Enchantment:
-						CallbackComponent->BroadcastEnchantmentRemoved(Info);
-						break;
-					case EBuffType::Hex:
-						CallbackComponent->BroadcastHexRemoved(Info);
-						break;
-					}
+					FBuffEventInfo Info;
+					Info.Buff = Buff;
+					Info.Instigator = Instigator;
+					Info.Source = Source;
+					CallbackComponent->BroadcastBuffRemoved(Info);
 				}
 
 				if (GetWorld()->IsServer())
@@ -343,6 +417,8 @@ void UBuffComponent::QueueBuffRemoval(int32 ID, EBuffEndReason Reason)
 						FBuffRemovedRMIData& Data = AccumulatedRemovedBuffData.Emplace_GetRef();
 						Data.ID = ID;
 						Data.Reason = Reason;
+						Data.Instigator = Instigator;
+						Data.Source = Source;
 						break;
 					}
 					case EBuffRelevancy::All:
@@ -350,6 +426,8 @@ void UBuffComponent::QueueBuffRemoval(int32 ID, EBuffEndReason Reason)
 						FBuffRemovedRMIData& Data = AccumulatedRemovedBuffDataMulticast.Emplace_GetRef();
 						Data.ID = ID;
 						Data.Reason = Reason;
+						Data.Instigator = Instigator;
+						Data.Source = Source;
 						break;
 					}
 					default:
@@ -363,7 +441,7 @@ void UBuffComponent::QueueBuffRemoval(int32 ID, EBuffEndReason Reason)
 	}
 }
 
-void UBuffComponent::QueueBuffRemoval(UBuff* Buff, EBuffEndReason Reason)
+void UBuffComponent::QueueBuffRemoval(UBuff* Buff, EBuffEndReason Reason, AActor* Instigator, UObject* Source)
 {
 	if (!GetWorld()->IsServer() || Buff->GetTargetActor() != GetOwner())
 		return;
@@ -371,36 +449,35 @@ void UBuffComponent::QueueBuffRemoval(UBuff* Buff, EBuffEndReason Reason)
 	BuffTypeMap.Remove(Buff->GetID());
 
 	UBuff* SecondStrongest = nullptr;
-	UBuff* StrongestBuff = GetStrongestBuffOfClass(Buff->GetClass(), SecondStrongest);
+	UBuff* StrongestBuff = GetStrongestBuffOfClass(Buff->GetClass(), SecondStrongest, Buff);
 	if (Buff == StrongestBuff)
 	{
-		check(Buff->IsActive() && "Buff is not active, should never happen!");
-		Buff->Deactivate();
-
-		if (SecondStrongest && SecondStrongest->IsActive())
+		//Can be false if there are multiple instances of a buff with the same attribute level
+		if (Buff->IsActive())
 		{
-			//This is the strongest instance of this buff but there is another one applied
-			SecondStrongest->Activate();
+			ActiveBuffAmount--;
+			Buff->Deactivate();
+
+			if (SecondStrongest && !SecondStrongest->IsActive())
+			{
+				//This is the strongest instance of this buff but there is another one applied
+				ActiveBuffAmount++;
+				SecondStrongest->Activate();
+			}
 		}
 	}
 
-	Buff->End(Reason);
+	Buff->End(Reason, SecondStrongest != nullptr);
 	Buff->MarkForDestroy();
 	BuffsMarkedForDestruction.Add(Buff);
 
-	FBuffEventInfo Info;
-	Info.Buff = Buff;
 	if (CallbackComponent)
 	{
-		switch (Buff->GetType())
-		{
-		case EBuffType::Enchantment:
-			CallbackComponent->BroadcastEnchantmentRemoved(Info);
-			break;
-		case EBuffType::Hex:
-			CallbackComponent->BroadcastHexRemoved(Info);
-			break;
-		}
+		FBuffEventInfo Info;
+		Info.Buff = Buff;
+		Info.Instigator = Instigator;
+		Info.Source = Source;
+		CallbackComponent->BroadcastBuffRemoved(Info);
 	}
 
 	if (GetWorld()->IsServer())
@@ -412,6 +489,8 @@ void UBuffComponent::QueueBuffRemoval(UBuff* Buff, EBuffEndReason Reason)
 			FBuffRemovedRMIData& Data = AccumulatedRemovedBuffData.Emplace_GetRef();
 			Data.ID = Buff->GetID();
 			Data.Reason = Reason;
+			Data.Instigator = Instigator;
+			Data.Source = Source;
 			break;
 		}
 		case EBuffRelevancy::All:
@@ -419,6 +498,8 @@ void UBuffComponent::QueueBuffRemoval(UBuff* Buff, EBuffEndReason Reason)
 			FBuffRemovedRMIData& Data = AccumulatedRemovedBuffDataMulticast.Emplace_GetRef();
 			Data.ID = Buff->GetID();
 			Data.Reason = Reason;
+			Data.Instigator = Instigator;
+			Data.Source = Source;
 			break;
 		}
 		default:
@@ -452,31 +533,27 @@ void UBuffComponent::AddReplicatedBuff(const FBuffAddedRMIData& Data)
 	BuffTypeMap.Add(Data.ID, NewBuff->GetType());
 
 	UBuff* SecondStrongest = nullptr;
-	UBuff* StrongestBuff = GetStrongestBuffOfClass(Data.Class, SecondStrongest);
+	UBuff* StrongestBuff = GetStrongestBuffOfClass(Data.Class, SecondStrongest, NewBuff);
 	if (NewBuff == StrongestBuff)
 	{
 		//This is the second, stronger instance of the buff 
 		if (SecondStrongest && SecondStrongest->IsActive())
 		{
+			ActiveBuffAmount--;
 			SecondStrongest->Deactivate();
 		}
 
+		ActiveBuffAmount++;
 		NewBuff->Activate();
 	}
 
-	FBuffEventInfo Info;
-	Info.Buff = NewBuff;
 	if (CallbackComponent)
 	{
-		switch (NewBuff->GetType())
-		{
-		case EBuffType::Enchantment:
-			CallbackComponent->BroadcastEnchantmentAdded(Info);
-			break;
-		case EBuffType::Hex:
-			CallbackComponent->BroadcastHexAdded(Info);
-			break;
-		}
+		FBuffEventInfo Info;
+		Info.Buff = NewBuff;
+		Info.Instigator = Data.Instigator;
+		Info.Source = Data.Source;
+		CallbackComponent->BroadcastBuffAdded(Info);
 	}
 }
 
@@ -492,22 +569,35 @@ void UBuffComponent::RemoveReplicatedBuff(const FBuffRemovedRMIData& Data)
 			if (Buff->GetID() == Data.ID)
 			{
 				UBuff* SecondStrongest = nullptr;
-				UBuff* StrongestBuff = GetStrongestBuffOfClass(Buff->GetClass(), SecondStrongest);
+				UBuff* StrongestBuff = GetStrongestBuffOfClass(Buff->GetClass(), SecondStrongest, Buff);
 				if (Buff == StrongestBuff)
 				{
-					check(Buff->IsActive() && "Buff is not active, should never happen!");
-					Buff->Deactivate();
-
-					if (SecondStrongest && SecondStrongest->IsActive())
+					if (Buff->IsActive())
 					{
-						//This is the strongest instance of this buff but there is another one applied
-						SecondStrongest->Activate();
+						ActiveBuffAmount--;
+						Buff->Deactivate();
+
+						if (SecondStrongest && !SecondStrongest->IsActive())
+						{
+							//This is the strongest instance of this buff but there is another one applied
+							ActiveBuffAmount++;
+							SecondStrongest->Activate();
+						}
 					}
 				}
 
-				Buff->End(Data.Reason);
+				Buff->End(Data.Reason, SecondStrongest != nullptr);
 				Buff->MarkForDestroy();
 				BuffsMarkedForDestruction.Add(Buff);
+
+				if (CallbackComponent)
+				{
+					FBuffEventInfo Info;
+					Info.Buff = Buff;
+					Info.Instigator = Data.Instigator;
+					Info.Source = Data.Source;
+					CallbackComponent->BroadcastBuffRemoved(Info);
+				}
 			}
 		}
 	}

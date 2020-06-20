@@ -78,7 +78,7 @@ void ACorePlayerController::UpdateSelection()
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECC_Visibility, false, Hit);
 
-	if (Hit.bBlockingHit)
+	if (Hit.bBlockingHit && Hit.GetActor())
 	{
 		HoveredLocation = Hit.Location;
 

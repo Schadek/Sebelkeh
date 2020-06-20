@@ -24,8 +24,18 @@ void ATargetedSkillSelector::BeginPlay()
 					OwnerSkill->UseTarget(Selectable->GetOwner());
 					return;
 				}
+				else if ((OwnerSkill->GetPossibleTargets() & (1 << static_cast<uint8>(ESkillTarget::Self))) != 0)
+				{
+					OwnerSkill->UseTarget(Pawn);
+					return;
+				}
 			}
 			else if (CanBeUsedAgainst(Pawn))
+			{
+				OwnerSkill->UseTarget(Pawn);
+				return;
+			}
+			else if ((OwnerSkill->GetPossibleTargets() & (1 << static_cast<uint8>(ESkillTarget::Self))) != 0)
 			{
 				OwnerSkill->UseTarget(Pawn);
 				return;

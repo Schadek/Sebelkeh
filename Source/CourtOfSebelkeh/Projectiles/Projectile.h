@@ -35,7 +35,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 		const FVector& GetProjectileTargetLocation() const { return TargetLocation; }
 
-	void SetProperties(AActor* InTargetActor, const FVector& InTargetLocation, float InMaxRange, float InRadius, float InSpeedMultiplier);
+	UFUNCTION(BlueprintCallable)
+		void SetProperties(AActor* InTargetActor, const FVector& InTargetLocation, float InMaxRange, float InRadius, float InSpeedMultiplier);
+	
 	static AProjectile* SpawnProjectile(TSubclassOf<AProjectile> Class, AActor* Instigator, UObject* Owner, const FVector& Location);
 
 protected:

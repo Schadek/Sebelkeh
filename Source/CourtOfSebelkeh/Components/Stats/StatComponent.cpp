@@ -3,6 +3,9 @@
 
 #include "StatComponent.h"
 #include "CourtOfSebelkeh/Components/CallbackComponent.h"
+#include "CourtOfSebelkeh/Components/State/ActorStateComponent.h"
+#include "CourtOfSebelkeh/ActorStates/ActorStateDefinitions.h"
+#include "CourtOfSebelkeh/Libraries/CoreBlueprintLibrary.h"
 #include "Net/UnrealNetwork.h"
 
 UStatComponent::UStatComponent()
@@ -10,6 +13,95 @@ UStatComponent::UStatComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
+
+int32 UStatComponent::Heal(int32 Value, AActor* Healer, UObject* Source)
+{
+	if (!GetWorld()->IsServer())
+		return 0;
+
+	UCallbackComponent* HealerCallback = nullptr;
+	if (Healer)
+	{
+		HealerCallback = Healer->FindComponentByClass<UCallbackComponent>();
+	}
+
+	if (HealerCallback)
+	{
+		FPreDamageHealedEventInfo PreHealInfo;
+		PreHealInfo.Amount = Value;
+		PreHealInfo.Healer = Healer;
+		PreHealInfo.Source = Source;
+		PreHealInfo.Target = GetOwner();
+
+		HealerCallback->BroadcastPreHealApplied(PreHealInfo);
+		Value = PreHealInfo.Amount;
+	}
+
+	if (Callback)
+	{
+		FPreDamageHealedEventInfo PreHealInfo;
+		PreHealInfo.Amount = Value;
+		PreHealInfo.Healer = Healer;
+		PreHealInfo.Source = Source;
+		PreHealInfo.Target = GetOwner();
+
+		Callback->BroadcastPreHealReceived(PreHealInfo);
+		Value = PreHealInfo.Amount;
+	}
+
+	Value = FMath::Max(Value, 0);
+	AddStat(EStat::Health, Value);
+
+	if (HealerCallback)
+	{
+		FDamageHealedEventInfo HealInfo;
+		HealInfo.Amount = Value;
+		HealInfo.Healer = Healer;
+		HealInfo.Source = Source;
+		HealInfo.Target = GetOwner();
+
+		HealerCallback->BroadcastHealApplied(HealInfo);
+	}
+
+	if (Callback)
+	{
+		FDamageHealedEventInfo HealInfo;
+		HealInfo.Amount = Value;
+		HealInfo.Healer = Healer;
+		HealInfo.Source = Source;
+		HealInfo.Target = GetOwner();
+
+		Callback->BroadcastHealReceived(HealInfo);
+	}
+
+	return Value;
+}
+
+bool UStatComponent::Resurrect(int32 Health, int32 Energy, AActor* Instigator)
+{
+	UActorStateComponent* ActorStateComponent = GetOwner()->FindComponentByClass<UActorStateComponent>();
+	bool bIsStateDead = true;
+
+	if (ActorStateComponent)
+	{
+		bIsStateDead = ActorStateComponent->GetState()->IsA<UDeadActorState>();
+	}
+
+	if (bIsStateDead && GetStatRealNoCheck(EStat::Health) <= 0)
+	{
+		AddStat(EStat::Health, Health);
+		AddStat(EStat::Energy, Energy);
+
+		if (ActorStateComponent)
+		{
+			ActorStateComponent->SetState(nullptr, Instigator);
+		}
+
+		return true;
+	}
+
+	return false;
+}
 
 void UStatComponent::AddStat(EStat Type, int32 Value)
 {

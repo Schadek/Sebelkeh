@@ -83,6 +83,17 @@ bool UCallbackComponent::UnregisterCallback(ECallback Type, UObject* Listener)
 	return false;
 }
 
+void UCallbackComponent::BroadcastCostCalculation(FCostCalculationEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::CostCalculation)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnCostCalculation(Object.Listener, this, Info, Info);
+	}
+}
+
 void UCallbackComponent::BroadcastPreDamageDealt(FDamageEventInfo& Info)
 {
 	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::PreDamageDealt)];
@@ -127,47 +138,91 @@ void UCallbackComponent::BroadcastDamageReceived(const FDamageEventInfo& Info)
 	}
 }
 
-void UCallbackComponent::BroadcastEnchantmentAdded(FBuffEventInfo& Info)
+void UCallbackComponent::BroadcastPreHealApplied(FPreDamageHealedEventInfo& Info)
 {
-	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::EnchantmentAdded)];
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::PreHealApplied)];
 	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
 	{
 		FListener& Object = EventListeners[i];
 		if (Object.bActive)
-			ICallbackListener::Execute_OnEnchantmentAdded(Object.Listener, this, Info, Info);
+			ICallbackListener::Execute_OnPreHealApplied(Object.Listener, this, Info, Info);
 	}
 }
 
-void UCallbackComponent::BroadcastEnchantmentRemoved(FBuffEventInfo& Info)
+void UCallbackComponent::BroadcastHealApplied(const FDamageHealedEventInfo& Info)
 {
-	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::EnchantmentRemoved)];
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::HealApplied)];
 	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
 	{
 		FListener& Object = EventListeners[i];
 		if (Object.bActive)
-			ICallbackListener::Execute_OnEnchantmentRemoved(Object.Listener, this, Info, Info);
+			ICallbackListener::Execute_OnHealApplied(Object.Listener, this, Info);
 	}
 }
 
-void UCallbackComponent::BroadcastHexAdded(FBuffEventInfo& Info)
+void UCallbackComponent::BroadcastPreHealReceived(FPreDamageHealedEventInfo& Info)
 {
-	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::HexAdded)];
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::PreHealReceived)];
 	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
 	{
 		FListener& Object = EventListeners[i];
 		if (Object.bActive)
-			ICallbackListener::Execute_OnHexAdded(Object.Listener, this, Info, Info);
+			ICallbackListener::Execute_OnPreHealReceived(Object.Listener, this, Info, Info);
 	}
 }
 
-void UCallbackComponent::BroadcastHexRemoved(FBuffEventInfo& Info)
+void UCallbackComponent::BroadcastHealReceived(const FDamageHealedEventInfo& Info)
 {
-	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::HexRemoved)];
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::HealReceived)];
 	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
 	{
 		FListener& Object = EventListeners[i];
 		if (Object.bActive)
-			ICallbackListener::Execute_OnHexRemoved(Object.Listener, this, Info, Info);
+			ICallbackListener::Execute_OnHealReceived(Object.Listener, this, Info);
+	}
+}
+
+void UCallbackComponent::BroadcastPreBuffApplied(FPreBuffAppliedEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::PreBuffApplied)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnPreBuffApplied(Object.Listener, this, Info, Info);
+	}
+}
+
+void UCallbackComponent::BroadcastPreBuffReceived(FPreBuffReceivedEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::PreBuffReceived)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnPreBuffReceived(Object.Listener, this, Info, Info);
+	}
+}
+
+void UCallbackComponent::BroadcastBuffAdded(const FBuffEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::BuffAdded)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnBuffAdded(Object.Listener, this, Info);
+	}
+}
+
+void UCallbackComponent::BroadcastBuffRemoved(const FBuffEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::BuffRemoved)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnBuffRemoved(Object.Listener, this, Info);
 	}
 }
 
@@ -204,6 +259,28 @@ void UCallbackComponent::BroadcastSkillChannel(FSkillChannelEventInfo& Info)
 	}
 }
 
+void UCallbackComponent::BroadcastPreSkillUsed(FPreSkillUsedEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::PreSkillUsed)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnPreSkillUsed(Object.Listener, this, Info, Info);
+	}
+}
+
+void UCallbackComponent::BroadcastSkillUsed(const FSkillUsedEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::SkillUsed)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnSkillUsed(Object.Listener, this, Info);
+	}
+}
+
 void UCallbackComponent::BroadcastPreActorStateChange(FPreActorStateEventInfo& Info)
 {
 	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::PreActorStateChanged)];
@@ -212,5 +289,16 @@ void UCallbackComponent::BroadcastPreActorStateChange(FPreActorStateEventInfo& I
 		FListener& Object = EventListeners[i];
 		if (Object.bActive)
 			ICallbackListener::Execute_OnPreActorStateChange(Object.Listener, this, Info, Info);
+	}
+}
+
+void UCallbackComponent::BroadcastActorStateChange(const FActorStateEventInfo& Info)
+{
+	TArray<FListener>& EventListeners = Listeners[static_cast<int32>(ECallback::ActorStateChanged)];
+	for (int i = 0, Num = EventListeners.Num(); i < Num; i++)
+	{
+		FListener& Object = EventListeners[i];
+		if (Object.bActive)
+			ICallbackListener::Execute_OnActorStateChanged(Object.Listener, this, Info);
 	}
 }

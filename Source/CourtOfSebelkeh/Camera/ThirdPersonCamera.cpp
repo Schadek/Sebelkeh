@@ -26,6 +26,12 @@ AThirdPersonCamera::AThirdPersonCamera()
 void AThirdPersonCamera::SetTarget(USceneComponent* NewTarget)
 {
 	Target = NewTarget;
+
+	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		EnableInput(PlayerController);
+		InputComponent->BindAxis("Zoom", this, &AThirdPersonCamera::Zoom);
+	}
 }
 
 void AThirdPersonCamera::SetCameraRotationLag(float Value)
@@ -64,6 +70,11 @@ void AThirdPersonCamera::AddPitch(float PitchInput)
 FRotator AThirdPersonCamera::GetCameraRotation() const
 {
 	return CameraBoom->GetComponentRotation();
+}
+
+void AThirdPersonCamera::Zoom(float Value)
+{
+	CameraBoom->TargetArmLength += Value * ZoomSpeed;
 }
 
 void AThirdPersonCamera::BeginPlay()

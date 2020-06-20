@@ -28,6 +28,8 @@ class COURTOFSEBELKEH_API ICallbackListener
 public:
 
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnCostCalculation(const UCallbackComponent* CallbackComponent, const FCostCalculationEventInfo& Info, FCostCalculationEventInfo& OutInfo);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
 		void OnPreDamageDealt(const UCallbackComponent* CallbackComponent, const FDamageEventInfo& Info, FDamageEventInfo& OutInfo);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
 		void OnDamageDealt(const UCallbackComponent* CallbackComponent, const FDamageDealtEventInfo& Info);
@@ -36,13 +38,21 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
 		void OnDamageReceived(const UCallbackComponent* CallbackComponent, const FDamageEventInfo& Info);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
-		void OnEnchantmentAdded(const UCallbackComponent* CallbackComponent, const FBuffEventInfo& Info, FBuffEventInfo& OutInfo);
+		void OnPreHealApplied(const UCallbackComponent* CallbackComponent, const FPreDamageHealedEventInfo& Info, FPreDamageHealedEventInfo& OutInfo);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
-		void OnEnchantmentRemoved(const UCallbackComponent* CallbackComponent, const FBuffEventInfo& Info, FBuffEventInfo& OutInfo);
+		void OnHealApplied(const UCallbackComponent* CallbackComponent, const FDamageHealedEventInfo& Info);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
-		void OnHexAdded(const UCallbackComponent* CallbackComponent, const FBuffEventInfo& Info, FBuffEventInfo& OutInfo);
+		void OnPreHealReceived(const UCallbackComponent* CallbackComponent, const FPreDamageHealedEventInfo& Info, FPreDamageHealedEventInfo& OutInfo);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
-		void OnHexRemoved(const UCallbackComponent* CallbackComponent, const FBuffEventInfo& Info, FBuffEventInfo& OutInfo);
+		void OnHealReceived(const UCallbackComponent* CallbackComponent, const FDamageHealedEventInfo& Info);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnPreBuffApplied(const UCallbackComponent* CallbackComponent, const FPreBuffAppliedEventInfo& Info, FPreBuffAppliedEventInfo& OutInfo);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnPreBuffReceived(const UCallbackComponent* CallbackComponent, const FPreBuffReceivedEventInfo& Info, FPreBuffReceivedEventInfo& OutInfo);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnBuffAdded(const UCallbackComponent* CallbackComponent, const FBuffEventInfo& Info);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnBuffRemoved(const UCallbackComponent* CallbackComponent, const FBuffEventInfo& Info);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
 		void OnStatChanged(const UCallbackComponent* CallbackComponent, const FStatEventInfo& Info);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
@@ -50,6 +60,12 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
 		void OnSkillChannel(const UCallbackComponent* CallbackComponent, const FSkillChannelEventInfo& Info, FSkillChannelEventInfo& OutInfo);
 	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnPreSkillUsed(const UCallbackComponent* CallbackComponent, const FPreSkillUsedEventInfo& Info, FPreSkillUsedEventInfo& OutInfo);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnSkillUsed(const UCallbackComponent* CallbackComponent, const FSkillUsedEventInfo& Info);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
 		void OnPreActorStateChange(const UCallbackComponent* CallbackComponent, const FPreActorStateEventInfo& Info, FPreActorStateEventInfo& OutInfo);
+	UFUNCTION(BlueprintNativeEvent, Category = "Callback")
+		void OnActorStateChanged(const UCallbackComponent* CallbackComponent, const FActorStateEventInfo& Info);
 
 };

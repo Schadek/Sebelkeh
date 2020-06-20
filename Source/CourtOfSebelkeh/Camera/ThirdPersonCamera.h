@@ -29,10 +29,15 @@ public:
 
 protected:
 
+	void Zoom(float Value);
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
 protected:
+
+	UPROPERTY(EditAnywhere)
+		float ZoomSpeed = 10.f;
 
 	UPROPERTY()
 		APlayerController* LocalPlayerController;

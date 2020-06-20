@@ -29,9 +29,6 @@ public:
 	UFUNCTION(BlueprintCallable)
 		void EquipWeaponByDefinition(const FWeaponDefinition& Definition);
 
-	UFUNCTION(BlueprintCallable)
-		void EquipWeapon(UWeapon* Weapon);
-
 protected:
 
 	virtual void BeginPlay() override;
@@ -53,20 +50,21 @@ protected:
 
 protected:
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UFUNCTION()
 		void OnOwnerReachedTarget(ACoreCharacter* Character, AActor* Target, const FVector& Location, float TargetRange);
 	UFUNCTION()
 		void OnOwnerAbortedWalk(ACoreCharacter* Character, AActor* Target, const FVector& Location, float TargetRange);
 
 	UFUNCTION(NetMulticast, Unreliable)
-		void Attack(AActor* Target, UWeapon* Weapon);
-	UFUNCTION(NetMulticast, Reliable)
-		void EquipWeaponInternal(const FWeaponDefinition& Definition);
+		void Attack(AActor* Target, uint8 WeaponIndex);
 
+	void EquipWeaponInternal(const FWeaponDefinition& WeaponDefinition);
 	void UnequipWeaponInternal(UWeapon* Weapon);
 
 	UFUNCTION()
-		OnRep_EquippedWeaponDefinitions();
+		void OnRep_EquippedWeaponDefinitions();
 
 	UPROPERTY(Replicated, ReplicatedUsing = "OnRep_EquippedWeaponDefinitions")
 		TArray<FWeaponDefinition> EquippedWeaponDefinitions;

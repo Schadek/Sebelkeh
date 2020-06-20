@@ -10,6 +10,7 @@
 #include "CourtOfSebelkeh/Libraries/CoreBlueprintLibrary.h"
 #include "CourtOfSebelkeh/Settings/GameSettings.h"
 #include "CourtOfSebelkeh/Components/CallbackComponent.h"
+#include "CourtOfSebelkeh/Meta/Group.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -251,6 +252,16 @@ bool ACoreCharacter::RequestKnockDown(float Duration, AActor* RequestInstigator)
 	}
 
 	return false;
+}
+
+UGroup* ACoreCharacter::GetGroup()
+{
+	if (!Group)
+	{
+		Group = NewObject<UGroup>(this, UGroup::StaticClass());
+	}
+
+	return Group;
 }
 
 bool ACoreCharacter::CanDodge() const

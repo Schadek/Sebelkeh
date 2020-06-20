@@ -30,7 +30,7 @@ public:
 		FLinearColor PassiveFactionColor;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Factions")
-		TMap<EFactionState, uint8> FactionStateToOutlineIndexMap;
+		TMap<TEnumAsByte<ESkillTarget>, uint8> FactionStateToOutlineIndexMap;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Buffs")
 		FLinearColor BaseBuffColor;
@@ -40,5 +40,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Buffs")
 		FLinearColor HexColor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Buffs")
+		FLinearColor ConditionColor;
 
 };

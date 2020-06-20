@@ -13,6 +13,7 @@
 
 class UBuff;
 class ACoreGameState;
+class AAreaOfEffectActor;
 
 UCLASS()
 class COURTOFSEBELKEH_API UCoreBlueprintLibrary : public UBlueprintFunctionLibrary
@@ -28,30 +29,45 @@ public:
 		static FLinearColor GetActorFactionColor(AActor* Target);
 
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"))
-		static FLinearColor GetFactionColorByState(UObject* WorldContextObject, EFactionState State);
+		static FLinearColor GetFactionColorByState(UObject* WorldContextObject, ESkillTarget State);
 
 	UFUNCTION(BlueprintPure)
 		static FLinearColor GetBuffTypeColor(UBuff* Buff);
 
 	UFUNCTION(BlueprintPure)
-		static EFactionState GetActorFactionState(AActor* Target);
+		static ESkillTarget GetActorFactionState(AActor* Target);
 
 	UFUNCTION(BlueprintPure)
-		static EFactionState GetActorFactionStateRelativeTo(AActor* Origin, AActor* Target);
+		static ESkillTarget GetActorFactionStateRelativeTo(AActor* Origin, AActor* Target);
 
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"))
-		static UUISettings* GetUISettings(UObject* WorldContextObject);
+		static UUISettings* GetUISettings(const UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"))
-		static UGameSettings* GetGameSettings(UObject* WorldContextObject);
+		static UGameSettings* GetGameSettings(const UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"))
-		static float GetRangeFromPreset(UObject* WorldContextObject, ERangePreset Preset);
+		static float GetRangeFromPreset(const UObject* WorldContextObject, ERangePreset Preset);
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"))
-		static TArray<AActor*> FilterActorsByFaction(UObject* WorldContextObject, AActor* Origin, const TArray<AActor*>& Targets, const TArray<ESkillTarget>& PossibleTargets);
+		static TArray<AActor*> FilterActorsByFaction(UObject* WorldContextObject, AActor* Origin, const TArray<AActor*>& Targets, int32 PossibleTargetsMask);
+
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", AutoCreateRefTerm = "ActorsToIgnore"))
+		static void DealAreaDamage(UObject* WorldContextObject, AActor* Origin, int32 PossibleTargetsMask, const FVector& Location, float Radius, const TArray<AActor*>& ActorsToIgnore, const FDamageInfo& DamageInfo);
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"))
-		static void DealAreaDamage(UObject* WorldContextObject, AActor* Origin, const TArray<ESkillTarget>& PossibleTargets, const FVector& Location, float Radius, const FDamageInfo& DamageInfo);
+		static AAreaOfEffectActor* SpawnAreaActor(UObject* WorldContextObject, const FTransform& Transform, int32 PossibleTargetsMask, AActor* Owner, float Radius, float TickInterval = -1.f);
+
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", AutoCreateRefTerm = "ActorsToIgnore"))
+		static void GetValidTargetsInArea(UObject* WorldContextObject, AActor* Origin, int32 PossibleTargetsMask, const FVector& Location, float Radius, const TArray<AActor*>& ActorsToIgnore, TArray<AActor*>& OutActors);
+
+	UFUNCTION(BlueprintCallable)
+		static void GetAllPropertyNames(UObject* Object, TArray<FName>& OutNames);
+
+	UFUNCTION(BlueprintCallable)
+		static void ExpandSkillTargetMask(int32 Bitmask, TArray<TEnumAsByte<ESkillTarget>>& OutTargets);
+
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"))
+		static AProjectile* SpawnProjectile(UObject* WorldContextObject, TSubclassOf<AProjectile> Class, AActor* Instigator, UObject* Owner, const FVector& Location);
 
 };

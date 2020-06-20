@@ -39,11 +39,10 @@ void UBuff::Begin(UBuffComponent* InBuffComponent, AActor* InTarget, AActor* InI
 void UBuff::Tick(float DeltaSeconds)
 {
 	NextTickTimeStamp = GetWorld()->GetTimeSeconds() + TickRate;
-
 	ReceiveTick(DeltaSeconds);
 }
 
-void UBuff::End(EBuffEndReason Reason)
+void UBuff::End(EBuffEndReason Reason, const bool bLastOfThisType)
 {
 	if (GetWorld()->IsServer())
 	{
@@ -62,7 +61,7 @@ void UBuff::End(EBuffEndReason Reason)
 		}
 	}
 
-	ReceiveEnd(Reason);
+	ReceiveEnd(Reason, bLastOfThisType);
 }
 
 void UBuff::Activate()
@@ -135,7 +134,7 @@ bool UBuff::WantsTick(float WorldTime) const
 
 void UBuff::RemoveSelf()
 {
-	BuffComponent->RemoveBuff(GetID());
+	BuffComponent->RemoveBuff(GetID(), nullptr, this);
 }
 
 float UBuff::GetRemainingDurationFraction() const

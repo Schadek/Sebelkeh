@@ -137,7 +137,7 @@ void USkillComponent::SetSkillInternal(int32 Index, TSubclassOf<USkillBase> Clas
 			OldSkill->End();
 
 		Skills[Index] = NewSkill;
-		NewSkill->Begin(this);
+		NewSkill->Begin(this, true);
 
 		OnSkillChanged(Index, OldSkill, NewSkill);
 	}
@@ -162,9 +162,9 @@ void USkillComponent::InternalRequestMaintainedBuffEnd_Implementation(int32 Buff
 	{
 		if (MaintainedBuffs[i].BuffInstanceId == BuffId)
 		{
-			if (UBuffComponent* BuffCompoennt = MaintainedBuffs[i].Target->FindComponentByClass<UBuffComponent>())
+			if (UBuffComponent* BuffComponent = MaintainedBuffs[i].Target->FindComponentByClass<UBuffComponent>())
 			{
-				BuffCompoennt->RemoveBuff(BuffId);
+				BuffComponent->RemoveBuff(BuffId, GetOwner(), this);
 			}
 			break;
 		}
@@ -187,6 +187,17 @@ bool USkillComponent::UseSkillOnTargetInternal_Validate(uint8 Index, AActor* Tar
 	return true;
 }
 
+void USkillComponent::GetSkillsWithAttribute(TSubclassOf<USkillAttribute> Class, TArray<USkillBase*>& OutSkills)
+{
+	for (USkillBase* Skill : Skills)
+	{
+		if (Skill->GetAttribute() == Class)
+		{
+			OutSkills.Add(Skill);
+		}
+	}
+}
+
 void USkillComponent::RequestMaintainedBuffEnd(int32 BuffId)
 {
 	InternalRequestMaintainedBuffEnd(BuffId);
@@ -203,6 +214,19 @@ int32 USkillComponent::GetAttributeValue(TSubclassOf<USkillAttribute> Class) con
 	}
 
 	return 0;
+}
+
+bool USkillComponent::InterruptChanneling()
+{
+	if (USkillBase* ChanneledSkill = GetChanneledSkill())
+	{
+		if (ChanneledSkill->CanBeInterrupted())
+		{
+			SyncSkillChannelEnd(ChanneledSkillIndex, false);
+		}
+	}
+
+	return false;
 }
 
 void USkillComponent::UseSkillOnTarget(int32 Index, AActor* Target)
@@ -233,21 +257,8 @@ void USkillComponent::UseSkillOnLocation(USkillBase* Skill, const FVector& Locat
 	}
 }
 
-void USkillComponent::SetSkillOnCooldown(int32 Index)
+void USkillComponent::SetSkillOnCooldown(int32 Index, float EndTimestamp)
 {
-	USkillBase* Skill = Skills[Index];
-	float EndTimestamp = Skill->GetBaseCooldown();
-
-	if (Callback)
-	{
-		FCooldownEventInfo Info;
-		Info.Skill = Skill;
-		Info.Cooldown = EndTimestamp;
-
-		Callback->BroadcastSkillOnCooldown(Info);
-		EndTimestamp = GetWorld()->GetTimeSeconds() + Info.Cooldown;
-	}
-
 	FSkillCooldownRPCData Data;
 	Data.Index = Index;
 	Data.EndTimestamp = EndTimestamp;
@@ -255,14 +266,15 @@ void USkillComponent::SetSkillOnCooldown(int32 Index)
 	SetSkillOnCooldownInternal(Data);
 }
 
-void USkillComponent::SetSkillOnCooldown(USkillBase* Skill)
+void USkillComponent::SetSkillOnCooldown(USkillBase* Skill, float EndTimestamp)
 {
 	int32 Index = 0;
 	if (Skills.Find(Skill, Index))
 	{
-		SetSkillOnCooldown(Index);
+		SetSkillOnCooldown(Index, EndTimestamp);
 	}
 }
+
 
 void USkillComponent::ChannelSkill(int32 Index, AActor* Target, const FVector& Location)
 {
@@ -289,12 +301,22 @@ void USkillComponent::ChannelSkill(int32 Index, AActor* Target, const FVector& L
 			UChannelingActorState* ChannelState = Cast<UChannelingActorState>(ActorState->SetState(UCoreBlueprintLibrary::GetGameSettings(this)->IdleChannelingState));
 			ChannelState->SetChanneledSkill(Skill);
 			ChannelState->SetDuration(ChannelTime);
+
+			if (Callback && Skill->IsEasyToInterrupt())
+			{
+				ChannelState->SetEasilyInterruptable(Callback);
+			}
 		}
 		else
 		{
 			UChannelingActorState* ChannelState = Cast<UChannelingActorState>(ActorState->SetState(UCoreBlueprintLibrary::GetGameSettings(this)->MovableChannelingState));
 			ChannelState->SetChanneledSkill(Skill);
 			ChannelState->SetDuration(ChannelTime);
+
+			if (Callback && Skill->IsEasyToInterrupt())
+			{
+				ChannelState->SetEasilyInterruptable(Callback);
+			}
 		}
 
 		SyncSkillChannelBegin(Index, ChannelTime);

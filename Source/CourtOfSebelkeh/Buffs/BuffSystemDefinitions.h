@@ -8,6 +8,7 @@
 
 class UTexture2D;
 class UBuffComponent;
+class USkillComponent;
 
 UENUM(BlueprintType)
 enum class EBuffCallback : uint8
@@ -41,6 +42,7 @@ enum class EBuffType : uint8
 	Cry,
 	Stance,
 	Form,
+	Condition,
 	Other,
 	Count
 };
@@ -60,13 +62,13 @@ struct FAutoCallback
 public:
 
 	UPROPERTY(EditDefaultsOnly)
-		bool bRegisterOnServer;
+		bool bRegisterOnServer = true;
 
 	UPROPERTY(EditDefaultsOnly)
-		bool bRegisterOnClient;
+		bool bRegisterOnClient = false;
 
 	UPROPERTY(EditDefaultsOnly)
-		ECallback Type;
+		ECallback Type = ECallback::ActorStateChanged;
 
 };
 
@@ -81,7 +83,7 @@ public:
 
 	virtual void Begin(UBuffComponent* InBuffComponent, AActor* InTarget, AActor* InInstigator, int32 InID, float InEndTimeStamp, bool bInIsInfinite);
 	virtual void Tick(float DeltaSeconds);
-	virtual void End(EBuffEndReason Reason);
+	virtual void End(EBuffEndReason Reason, const bool bLastOfThisType);
 
 	virtual void Activate();
 	virtual void Deactivate();
@@ -139,6 +141,11 @@ public:
 	UFUNCTION(BlueprintCallable)
 		TSubclassOf<USkillAttribute> GetAttribute() const { return Attribute; }
 
+	UFUNCTION(BlueprintCallable)
+		UBuffSkill* GetInstigatorSkill() const { return InstigatorSkill; }
+
+	void SetInstigatorSkill(UBuffSkill* InInstigatorSkill) { InstigatorSkill = InInstigatorSkill; }
+
 protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Buff", meta = (DisplayName = "Begin"))
@@ -148,7 +155,7 @@ protected:
 		void ReceiveTick(float DeltaSeconds);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Buff", meta = (DisplayName = "End"))
-		void ReceiveEnd(EBuffEndReason Reason);
+		void ReceiveEnd(EBuffEndReason Reason, const bool bLastOfThisType);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Buff", meta = (DisplayName = "Activate"))
 		void ReceiveActivate();
@@ -162,6 +169,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Buff")
 		FText Name;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Buff")
+		FText Description;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Buff")
 		UTexture2D* Icon;
@@ -196,6 +206,8 @@ protected:
 		AActor* Target;
 	UPROPERTY()
 		AActor* Instigator;
+	UPROPERTY()
+		UBuffSkill* InstigatorSkill;
 
 	TMap<EStat, int32> MaintenanceCosts;
 
@@ -226,6 +238,9 @@ struct COURTOFSEBELKEH_API FBuffAddedRMIData
 	UPROPERTY()
 		AActor* Instigator;
 
+	UPROPERTY()
+		UObject* Source;
+
 };
 
 USTRUCT()
@@ -238,5 +253,11 @@ struct COURTOFSEBELKEH_API FBuffRemovedRMIData
 
 	UPROPERTY()
 		EBuffEndReason Reason;
+
+	UPROPERTY()
+		AActor* Instigator;
+
+	UPROPERTY()
+		UObject* Source;
 
 };

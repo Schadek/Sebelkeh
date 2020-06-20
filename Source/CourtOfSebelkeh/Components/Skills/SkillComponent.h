@@ -47,6 +47,9 @@ public:
 		const TArray<USkillBase*>& GetSkills() const { return Skills; }
 
 	UFUNCTION(BlueprintCallable)
+		void GetSkillsWithAttribute(TSubclassOf<USkillAttribute> Class, TArray<USkillBase*>& OutSkills);
+
+	UFUNCTION(BlueprintCallable)
 		const TArray<FMaintainedBuff>& GetMaintainedBuffs() const { return MaintainedBuffs; }
 
 	UFUNCTION(BlueprintCallable)
@@ -55,13 +58,19 @@ public:
 	UFUNCTION(BlueprintCallable)
 		int32 GetAttributeValue(TSubclassOf<USkillAttribute> Class) const;
 
+	UFUNCTION(BlueprintCallable)
+		USkillBase* GetChanneledSkill() const { return ChanneledSkillIndex != 0 ? Skills[ChanneledSkillIndex] : nullptr; }
+
+	UFUNCTION(BlueprintCallable)
+		bool InterruptChanneling();
+
 	void UseSkillOnTarget(int32 Index, AActor* Target);
 	void UseSkillOnTarget(USkillBase* Skill, AActor* Target);
 	void UseSkillOnLocation(int32 Index, const FVector& Location);
 	void UseSkillOnLocation(USkillBase* Skill, const FVector& Location);
 
-	void SetSkillOnCooldown(int32 Index);
-	void SetSkillOnCooldown(USkillBase* Skill);
+	void SetSkillOnCooldown(int32 Index, float EndTimestamp);
+	void SetSkillOnCooldown(USkillBase* Skill, float EndTimestamp);
 
 	void ChannelSkill(int32 Index, AActor* Target, const FVector& Location);
 	void ChannelSkill(USkillBase* Skill, AActor* Target, const FVector& Location);
@@ -80,6 +89,8 @@ public:
 	void SetAdrenaline(int32 Index, int32 Adrenaline);
 	void SetAdrenaline(USkillBase* Skill, int32 Adrenaline);
 	int32 GetAdrenaline(const USkillBase* Skill) const;
+
+	UCallbackComponent* GetCallbackComponent() const { return Callback; }
 
 protected:
 

@@ -7,13 +7,18 @@
 #include "CoreDamageType.generated.h"
 
 /**
- * 
+ *
  */
 UCLASS()
 class COURTOFSEBELKEH_API UCoreDamageType : public UDamageType
 {
 	GENERATED_BODY()
-	
+
+public:
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+		FText DisplayName;
+
 };
 
 UCLASS()

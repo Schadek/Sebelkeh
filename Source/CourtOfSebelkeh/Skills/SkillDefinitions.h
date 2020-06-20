@@ -26,45 +26,14 @@ enum class ERangePreset : uint8
 	Nearby,
 	InTheArea,
 	Earshot,
+	Touch
 };
 
 UENUM(BlueprintType)
-enum class ESkillType : uint8
+enum class EBuffSkillTargetLogic : uint8
 {
-	Skill,
-	Attack,
-	MeleeAttack,
-	AxeAttack,
-	DaggerAttack,
-	LeadAttack,
-	OffHandAttack,
-	DualAttack,
-	HammerAttack,
-	ScytheAttack,
-	SwordAttack,
-	PetAttack,
-	RangedAttack,
-	BowAttack,
-	SpearAttack,
-	Chant,
-	Echo,
-	Form,
-	Glyph,
-	Preparation,
-	Ritual,
-	BindingRitual,
-	NatureRitual,
-	Shout,
-	Signet,
-	Spell,
-	EnchantmentSpell,
-	HexSpell,
-	ItemSpell,
-	WardSpell,
-	WeaponSpell,
-	WellSpell,
-	Stance,
-	Trap,
+	SingleTarget,
+	AllInArea
 };
 
 UCLASS(Blueprintable, BlueprintType)

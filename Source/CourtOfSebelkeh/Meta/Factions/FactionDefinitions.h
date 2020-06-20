@@ -7,18 +7,7 @@
 #include "FactionDefinitions.generated.h"
 
 UENUM(BlueprintType, meta = (Bitflags))
-enum class EFactionState : uint8
-{
-	Ally,
-	Enemy,
-	Neutral,
-	Passive
-};
-
-ENUM_CLASS_FLAGS(EFactionState)
-
-UENUM(BlueprintType, meta = (Bitflags))
-enum class ESkillTarget : uint8
+enum ESkillTarget
 {
 	Ally,
 	Enemy,

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "ActorMetaComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FNameChangeSignature, UActorMetaComponent*, Component, const FText&, NewName);
@@ -23,7 +24,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 		const FText& GetName() const { return Name; }
 
-	UFUNCTION(BlueprintAuthorityOnly)
+	UFUNCTION(BlueprintCallable)
 		void SetFaction(uint8 NewFaction);
 
 	UFUNCTION(BlueprintCallable)
@@ -43,6 +44,12 @@ public:
 
 	UPROPERTY(BlueprintAssignable)
 		FNameChangeSignature OnNameChangedDel;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
+		void AddGameplayTag(const FGameplayTag& Tag);
+
+	UFUNCTION(BlueprintCallable)
+		bool HasGameplayTag(const FGameplayTag& Tag) const;
 
 protected:
 
@@ -66,5 +73,8 @@ protected:
 
 	UPROPERTY(EditAnywhere, Replicated, ReplicatedUsing = "OnRep_Name")
 		FText Name;
+
+	UPROPERTY(EditAnywhere, Replicated)
+		FGameplayTagContainer GameplayTags;
 
 };

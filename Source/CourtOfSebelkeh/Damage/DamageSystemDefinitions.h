@@ -8,6 +8,16 @@
 
 class UCoreDamageType;
 
+UENUM(BlueprintType, meta = (Bitflags))
+enum EDamageFlag
+{
+	None,
+	AutoAttack,
+	Melee
+};
+
+ENUM_CLASS_FLAGS(EDamageFlag)
+
 USTRUCT(BlueprintType)
 struct COURTOFSEBELKEH_API FDamageInfo
 {
@@ -29,5 +39,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DamageInfo")
 		UObject* Source;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DamageInfo", meta = (Bitmask, BitmaskEnum = "EDamageFlag"))
+		int32 DamageFlags;
 
 };

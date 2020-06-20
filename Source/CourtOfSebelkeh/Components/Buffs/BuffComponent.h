@@ -16,7 +16,8 @@ struct FBuffArrayWrapper
 
 public:
 
-	TArray<UBuff*> Buffs;
+	UPROPERTY()
+		TArray<UBuff*> Buffs;
 };
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent, DisplayThumbnail = "true"))
@@ -37,31 +38,43 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	UFUNCTION(BlueprintCallable, meta = (ComponentClass = "BuffComponent"), meta = (DeterminesOutputType = "Class"))
-		UBuff* AddBuff(TSubclassOf<UBuff> Class, AActor* Instigator, float Duration = -1.f);
+		UBuff* AddBuff(TSubclassOf<UBuff> Class, AActor* Instigator, UObject* Source, float Duration = -1.f);
 
 	UFUNCTION(BlueprintCallable)
-		void RemoveBuff(int32 ID);
+		void RemoveBuff(int32 ID, AActor* Instigator, UObject* Source);
 
 	UFUNCTION(BlueprintCallable)
-		void RemoveBuffByReference(UBuff* Buff);
+		void RemoveBuffByReference(UBuff* Buff, AActor* Instigator, UObject* Source);
+
+	UFUNCTION(BlueprintCallable)
+		bool RemoveBuffOfType(EBuffType Type, AActor* Instigator, UObject* Source, int32 Amount = 1);
 
 	UFUNCTION(BlueprintCallable, meta = (KeyWords = "Remove All"))
-		void ClearAll();
+		void ClearAll(AActor* Instigator, UObject* Source, int32& OutRemovedActiveBuffs, int32& OutRemovedBuffsTotal, TArray<UBuff*>& OutRemovedActiveBuffInstances);
 
 	UFUNCTION(BlueprintCallable, meta = (KeyWords = "Remove All Type"))
-		void ClearAllOfType(EBuffType Type);
+		void ClearAllOfType(EBuffType Type, AActor* Instigator, UObject* Source, int32& OutRemovedActiveBuffs, int32& OutRemovedBuffsTotal, TArray<UBuff*>& OutRemovedActiveBuffInstances);
 
 	UFUNCTION(BlueprintCallable)
 		UBuff* GetBuffById(int32 ID) const;
 
+	UFUNCTION(BlueprintCallable)
+		int32 GetBuffAmount() const;
+
+	UFUNCTION(BlueprintCallable)
+		int32 GetBuffAmountByType(EBuffType Type) const;
+
+	UFUNCTION(BlueprintCallable)
+		bool HasBuffByType(EBuffType Type) const { return GetBuffAmountByType(Type) > 0; }
+
 protected:
 
-	UBuff* GetStrongestBuffOfClass(TSubclassOf<UBuff> Class, UBuff* SecondStrongest);
+	UBuff* GetStrongestBuffOfClass(TSubclassOf<UBuff> Class, UBuff*& SecondStrongest, UBuff* QueryOrigin);
 
-	void RemoveAllBuffsOfType(TSubclassOf<UBuff> Class);
+	void RemoveAllBuffsOfType(TSubclassOf<UBuff> Class, AActor* Instigator, UObject* Source);
 
-	void QueueBuffRemoval(UBuff* Buff, EBuffEndReason Reason);
-	void QueueBuffRemoval(int32 ID, EBuffEndReason Reason);
+	void QueueBuffRemoval(UBuff* Buff, EBuffEndReason Reason, AActor* Instigator, UObject* Source);
+	void QueueBuffRemoval(int32 ID, EBuffEndReason Reason, AActor* Instigator, UObject* Source);
 	void RemoveBuffInternal(UBuff* Buff);
 
 	void AddReplicatedBuff(const FBuffAddedRMIData& Data);
@@ -101,4 +114,5 @@ protected:
 	TArray<FBuffRemovedRMIData> AccumulatedRemovedBuffDataMulticast;
 
 	int32 BuffIDCounter;
+	int32 ActiveBuffAmount;
 };

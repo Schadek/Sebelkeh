@@ -11,10 +11,13 @@
 #include "CourtOfSebelkeh/Components/State/ActorStateComponent.h"
 #include "CourtOfSebelkeh/Settings/GameSettings.h"
 #include "CourtOfSebelkeh/Controller/CorePlayerController.h"
+#include "Net/UnrealNetwork.h"
 
 UInventoryComponent::UInventoryComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+
+	SetIsReplicatedByDefault(true);
 }
 
 bool UInventoryComponent::SetAttackTarget(AActor* Target)
@@ -27,11 +30,6 @@ bool UInventoryComponent::SetAttackTarget(AActor* Target)
 
 	if (EquippedWeapons.Num() > 0)
 	{
-		if (ActorStateComponent)
-		{
-			ActorStateComponent->SetState(UCoreBlueprintLibrary::GetGameSettings(this)->AttackingState);
-		}
-
 		float WeaponRange = EquippedWeapons[0]->GetDefinition().FireRange;
 		float WeaponRangeSq = FMath::Pow(WeaponRange, 2);
 		AttackTarget = Target;
@@ -42,7 +40,7 @@ bool UInventoryComponent::SetAttackTarget(AActor* Target)
 			if (ACoreCharacter* Character = Cast<ACoreCharacter>(GetOwner()))
 			{
 				bIsWaitingForAttackCallback = true;
-				Character->FollowActor(Target, WeaponRange);
+				Character->FollowActor(Target, WeaponRange - 20.f);
 			}
 			else
 			{
@@ -71,14 +69,42 @@ void UInventoryComponent::StopAttacking()
 
 void UInventoryComponent::EquipWeaponByDefinition(const FWeaponDefinition& Definition)
 {
+	if (!GetWorld()->IsServer())
+	{
+		return;
+	}
+
 	EquipWeaponInternal(Definition);
 }
 
-void UInventoryComponent::EquipWeapon(UWeapon* Weapon)
+void UInventoryComponent::EquipWeaponInternal(const FWeaponDefinition& WeaponDefinition)
+{
+	UWeapon* NewWeapon = NewObject<UWeapon>(this, UWeapon::StaticClass());
+	NewWeapon->SetDefinition(WeaponDefinition);
+	EquippedWeapons.Add(NewWeapon);
+
+	if (GetWorld()->IsServer())
+	{
+		EquippedWeaponDefinitions.Add(WeaponDefinition);
+	}
+}
+
+void UInventoryComponent::UnequipWeaponInternal(UWeapon* Weapon)
+{
+	EquippedWeapons.Remove(Weapon);
+	EquippedWeaponDefinitions.Remove(Weapon->GetDefinition());
+}
+
+void UInventoryComponent::OnRep_EquippedWeaponDefinitions()
 {
 	EquippedWeapons.Empty();
-	EquippedWeapons.Add(Weapon);
+
+	for (const FWeaponDefinition& Definition : EquippedWeaponDefinitions)
+	{
+		EquipWeaponInternal(Definition);
+	}
 }
+
 
 void UInventoryComponent::BeginPlay()
 {
@@ -97,6 +123,8 @@ void UInventoryComponent::BeginPlay()
 	}
 
 	ActorStateComponent = GetOwner()->FindComponentByClass<UActorStateComponent>();
+
+	SetComponentTickEnabled(GetWorld()->IsServer());
 }
 
 void UInventoryComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -118,18 +146,23 @@ void UInventoryComponent::TickAttackLogic(float DeltaSeconds)
 
 			if (AttackCooldown == 0.f && IsInAttackState() && IsLookingAtTarget() && AttackTarget->GetSquaredDistanceTo(GetOwner()) <= WeaponRangeSq)
 			{
-				Attack(AttackTarget, EquippedWeapons[0]);
+				Attack(AttackTarget, 0);
 			}
 		}
 		else if (IsLookingAtTarget() && AttackTarget->GetSquaredDistanceTo(GetOwner()) <= WeaponRangeSq)
 		{
-			Attack(AttackTarget, EquippedWeapons[0]);
+			Attack(AttackTarget, 0);
 		}
 	}
 }
 
 void UInventoryComponent::Server_SetAttackTarget_Implementation(AActor* Target)
 {
+	if (ActorStateComponent)
+	{
+		ActorStateComponent->SetState(UCoreBlueprintLibrary::GetGameSettings(this)->AttackingState);
+	}
+
 	SetAttackTargetInternal(Target);
 }
 
@@ -149,6 +182,13 @@ void UInventoryComponent::Multicast_StopAttacking_Implementation(AActor* Target)
 void UInventoryComponent::SetAttackTargetInternal(AActor* Target)
 {
 	AttackTarget = Target;
+}
+
+void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UInventoryComponent, EquippedWeaponDefinitions);
 }
 
 void UInventoryComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -218,15 +258,20 @@ void UInventoryComponent::OnOwnerAbortedWalk(ACoreCharacter* Character, AActor* 
 	bIsWaitingForAttackCallback = false;
 }
 
-void UInventoryComponent::Attack_Implementation(AActor* Target, UWeapon* Weapon)
+void UInventoryComponent::Attack_Implementation(AActor* Target, uint8 WeaponIndex)
 {
-	const FWeaponDefinition& Definition = Weapon->GetDefinition();
+	if (WeaponIndex >= EquippedWeapons.Num())
+	{
+		return;
+	}
+
+	const FWeaponDefinition& Definition = EquippedWeapons[WeaponIndex]->GetDefinition();
 	if (Definition.bLaunchesProjectile)
 	{
 		const FVector SpawnLocation = GetOwner()->GetActorLocation();
-		if (AProjectile* Projectile = AProjectile::SpawnProjectile(Weapon->GetDefinition().ProjectileClass, GetOwner(), Weapon, SpawnLocation))
+		if (AProjectile* Projectile = AProjectile::SpawnProjectile(Definition.ProjectileClass, GetOwner(), EquippedWeapons[WeaponIndex], SpawnLocation))
 		{
-			Projectile->SetProperties(Target, FVector::ZeroVector, Weapon->GetDefinition().Range, 25.f, 1.f);
+			Projectile->SetProperties(Target, FVector::ZeroVector, Definition.Range, 25.f, 1.f);
 
 			if (GetWorld()->IsServer())
 			{
@@ -235,11 +280,13 @@ void UInventoryComponent::Attack_Implementation(AActor* Target, UWeapon* Weapon)
 					if (bHit)
 					{
 						FDamageInfo DamageInfo;
-						DamageInfo.Amount = FMath::RandRange(Weapon->GetDefinition().MinimumDamage, Weapon->GetDefinition().MaximumDamage);
+						DamageInfo.Amount = FMath::RandRange(Definition.MinimumDamage, Definition.MaximumDamage);
 						DamageInfo.Instigator = GetOwner();
-						DamageInfo.Source = Weapon;
+						DamageInfo.Source = EquippedWeapons[WeaponIndex];
 						DamageInfo.Target = Target;
-						DamageInfo.Type = Weapon->GetDefinition().DamageClass;
+						DamageInfo.Type = Definition.DamageClass;
+						DamageInfo.DamageFlags |= (1 << static_cast<int32>(EDamageFlag::AutoAttack));
+
 						UCoreBlueprintLibrary::GetCoreGameState(this)->GetDamageSystem()->ProcessDamage(DamageInfo);
 					}
 				};
@@ -252,32 +299,34 @@ void UInventoryComponent::Attack_Implementation(AActor* Target, UWeapon* Weapon)
 	}
 	else
 	{
+		const FVector SpawnLocation = GetOwner()->GetActorLocation();
+		if (AProjectile* Projectile = AProjectile::SpawnProjectile(Definition.ProjectileClass, GetOwner(), EquippedWeapons[WeaponIndex], SpawnLocation))
+		{
+			Projectile->SetProperties(Target, FVector::ZeroVector, Definition.Range, 25.f, 1.f);
 
-	}
-}
+			if (GetWorld()->IsServer())
+			{
+				auto OnHit = [=](AProjectile* Projectile, bool bHit)
+				{
+					if (bHit)
+					{
+						FDamageInfo DamageInfo;
+						DamageInfo.Amount = FMath::RandRange(Definition.MinimumDamage, Definition.MaximumDamage);
+						DamageInfo.Instigator = GetOwner();
+						DamageInfo.Source = EquippedWeapons[WeaponIndex];
+						DamageInfo.Target = Target;
+						DamageInfo.Type = Definition.DamageClass;
+						DamageInfo.DamageFlags |= (1 << static_cast<int32>(EDamageFlag::AutoAttack));
+						DamageInfo.DamageFlags |= (1 << static_cast<int32>(EDamageFlag::Melee));
 
-void UInventoryComponent::EquipWeaponInternal_Implementation(const FWeaponDefinition& Definition)
-{
-	UWeapon* NewWeapon = NewObject<UWeapon>(this, UWeapon::StaticClass());
-	NewWeapon->SetDefinition(Definition);
+						UCoreBlueprintLibrary::GetCoreGameState(this)->GetDamageSystem()->ProcessDamage(DamageInfo);
+					}
+				};
+				Projectile->OnProjectileEndNative.AddLambda(OnHit);
 
-	EquipWeapon(NewWeapon);
-}
-
-void UInventoryComponent::UnequipWeaponInternal(UWeapon* Weapon)
-{
-	EquippedWeapons.Remove(Weapon);
-}
-
-UInventoryComponent::OnRep_EquippedWeaponDefinitions()
-{
-	for (UWeapon* Weapon : EquippedWeapons)
-	{
-		UnequipWeaponInternal(Weapon);
-	}
-
-	for (const FWeaponDefinition& Definition : EquippedWeaponDefinitions)
-	{
-		EquipWeaponByDefinition(Definition);
+				AttackCooldown = 2.f;
+				CurrentCycleAttackSpeed = EvaluateAttackSpeed();
+			}
+		}
 	}
 }

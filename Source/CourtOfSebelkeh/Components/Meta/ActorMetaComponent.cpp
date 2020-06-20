@@ -19,6 +19,19 @@ void UActorMetaComponent::SetFaction(uint8 NewFaction)
 	Faction = NewFaction;
 }
 
+void UActorMetaComponent::AddGameplayTag(const FGameplayTag& Tag)
+{
+	if (!GetWorld()->IsServer())
+		return;
+
+	GameplayTags.AddTagFast(Tag);
+}
+
+bool UActorMetaComponent::HasGameplayTag(const FGameplayTag& Tag) const
+{
+	return GameplayTags.HasTagExact(Tag);
+}
+
 void UActorMetaComponent::OnRep_Name()
 {
 	OnNameChanged(Name);
@@ -30,6 +43,7 @@ void UActorMetaComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 
 	DOREPLIFETIME(UActorMetaComponent, Faction);
 	DOREPLIFETIME(UActorMetaComponent, Name);
+	DOREPLIFETIME(UActorMetaComponent, GameplayTags);
 }
 
 void UActorMetaComponent::BeginPlay()

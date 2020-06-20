@@ -10,6 +10,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FFollowTargetSignature, ACoreChara
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMovementSignature, ACoreCharacter*, Sender);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMovementInputSignature, ACoreCharacter*, Sender);
 
+class UGroup;
 class UActorStateComponent;
 class UCallbackComponent;
 class UNativeCharacterBar;
@@ -47,6 +48,9 @@ public:
 		void StopAutoWalk(bool bReachedTarget);
 	UFUNCTION(BlueprintCallable)
 		bool RequestKnockDown(float Duration, AActor* RequestInstigator = nullptr);
+
+	UFUNCTION(BlueprintPure)
+		UGroup* GetGroup();
 
 	UPROPERTY(BlueprintAssignable)
 		FFollowTargetSignature OnFollowTargetReached;
@@ -121,6 +125,8 @@ protected:
 		AActor* FollowTarget;
 	UPROPERTY()
 		ADodgeHandler* CurrentDodgeHandler;
+	UPROPERTY()
+		UGroup* Group;
 
 	UPROPERTY()
 		UActorStateComponent* ActorStateComponent;

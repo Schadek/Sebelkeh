@@ -6,9 +6,62 @@
 #include "CourtOfSebelkeh/Damage/DamageSystem.h"
 #include "CourtOfSebelkeh/Components/Skills/SkillComponent.h"
 #include "CourtOfSebelkeh/Components/Stats/StatComponent.h"
+#include "CourtOfSebelkeh/Components/CallbackComponent.h"
+#include "CourtOfSebelkeh/Components/State/ActorStateComponent.h"
+#include "CourtOfSebelkeh/ActorStates/ActorStateDefinitions.h"
 #include "CourtOfSebelkeh/Characters/CoreCharacter.h"
 #include "CourtOfSebelkeh/Libraries/CoreBlueprintLibrary.h"
 #include "GameFramework/GameStateBase.h"
+
+
+USkillBase::USkillBase()
+	: DescriptionParser(this)
+{
+	{
+		DescriptionParserArrayCallback Callback;
+		Callback.BindUObject(this, &USkillBase::DescriptionParser_GetAttribute);
+		DescriptionParser.RegisterArrayIndexer("Attribute", Callback);
+	}
+
+	{
+		DescriptionParserArrayCallback Callback;
+		Callback.BindUObject(this, &USkillBase::DescriptionParser_GetAttributeRange);
+		DescriptionParser.RegisterArrayIndexer("...", Callback);
+	}
+
+	{
+		DescriptionParserCallback Callback;
+		Callback.BindUObject(this, &USkillBase::DescriptionParser_GetAttributeName);
+		DescriptionParser.RegisterKeyword("AttributeName", Callback);
+	}
+}
+
+FString USkillBase::DescriptionParser_GetAttributeRange(const FString& ArrayIndexKeyword, const TArray<int32>& Array) const
+{
+	if (bIsEquipped)
+	{
+		return DescriptionParser_GetAttribute(ArrayIndexKeyword, Array);
+	}
+	else
+	{
+		return FString::Printf(TEXT("%d...%d...%d"), Array[0], Array[12], Array[15]);
+	}
+}
+
+FString USkillBase::DescriptionParser_GetAttribute(const FString& ArrayIndexKeyword, const TArray<int32>& Array) const
+{
+	return FString::FromInt(Array[GetAttributeValue()]);
+}
+
+FString USkillBase::DescriptionParser_GetAttributeName(const FString& Keyword)
+{
+	if (Attribute)
+	{
+		return Attribute->GetDefaultObject<USkillAttribute>()->Name.ToString();
+	}
+
+	return "INVALID_ATTRIBUTE";
+}
 
 bool USkillBase::IsUsable_Implementation(FText& UsabilityMessage) const
 {
@@ -27,6 +80,19 @@ bool USkillBase::IsUsable_Implementation(FText& UsabilityMessage) const
 	return true;
 }
 
+bool USkillBase::CanTarget_Implementation(const AActor* Target, const FVector& Location, FText& OutUsabilityMessage) const
+{
+	if (Target)
+	{
+		if (UActorStateComponent* StateComp = Target->FindComponentByClass<UActorStateComponent>())
+		{
+			return !StateComp->GetState()->IsA<UDeadActorState>();
+		}
+	}
+
+	return true;
+}
+
 void USkillBase::PayCost()
 {
 	UStatComponent* StatComponent = Owner->GetOwner()->FindComponentByClass<UStatComponent>();
@@ -37,16 +103,31 @@ void USkillBase::PayCost()
 
 	for (auto& Pair : Costs)
 	{
-		PayCostSpecific(StatComponent, Pair.Key, Pair.Value);
+		int32 Value = Pair.Value;
+		PayCostSpecific(StatComponent, Pair.Key, Value);
 	}
 }
 
-void USkillBase::PayCostSpecific(UStatComponent* StatComponent, ESkillCost CostType, int32 Amount)
+void USkillBase::PayCostSpecific(UStatComponent* StatComponent, ESkillCost CostType, int32& Amount)
 {
+	if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+	{
+		FCostCalculationEventInfo Info;
+		Info.Type = CostType;
+		Info.Skill = const_cast<USkillBase*>(this);
+		Info.Amount = Amount;
+
+		Callback->BroadcastCostCalculation(Info);
+
+		Amount = Info.Amount;
+	}
+
+
 	switch (CostType)
 	{
 	case ESkillCost::Energy:
 	{
+		Amount = FMath::Max<int32>(0, Amount);
 		StatComponent->AddStat(EStat::Energy, -Amount);
 		break;
 	}
@@ -135,7 +216,6 @@ void USkillBase::OnHoverExit()
 
 void USkillBase::OnHoverEnter()
 {
-
 }
 
 bool USkillBase::CanPayCost() const
@@ -158,9 +238,22 @@ bool USkillBase::CanPayCost() const
 
 bool USkillBase::CanPaySpecificCost(UStatComponent* StatComponent, ESkillCost CostType, int32 Amount) const
 {
+	if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+	{
+		FCostCalculationEventInfo Info;
+		Info.Type = CostType;
+		Info.Skill = const_cast<USkillBase*>(this);
+		Info.Amount = Amount;
+
+		Callback->BroadcastCostCalculation(Info);
+
+		Amount = Info.Amount;
+	}
+
 	switch (CostType)
 	{
 	case ESkillCost::Energy:
+		Amount = FMath::Max<int32>(0, Amount);
 		return StatComponent->GetStatRealNoCheck(EStat::Energy) >= Amount;
 	case ESkillCost::Adrenaline:
 		return Owner->GetAdrenaline(this) >= Amount;
@@ -173,6 +266,11 @@ bool USkillBase::CanPaySpecificCost(UStatComponent* StatComponent, ESkillCost Co
 	}
 
 	return true;
+}
+
+float USkillBase::GetExplicitRange_Implementation() const
+{
+	return UCoreBlueprintLibrary::GetRangeFromPreset(this, ERangePreset::Earshot);
 }
 
 void USkillBase::UseLocation(FVector Location)
@@ -244,6 +342,56 @@ void USkillBase::UseTarget(AActor* Target)
 
 void USkillBase::UseLocationInternal(FVector Location)
 {
+	FText OutUsabilityText;
+	if (!IsUsable(OutUsabilityText))
+	{
+		Owner->NotifyOwner(OutUsabilityText);
+		return;
+	}
+
+	if (!CanTarget(nullptr, Location, OutUsabilityText))
+	{
+		Owner->NotifyOwner(OutUsabilityText);
+		return;
+	}
+
+	PayCost();
+	SetOnCooldown();
+
+	if (ChannelTime > 0.0f)
+	{
+		Owner->ChannelSkill(this, nullptr, Location);
+	}
+	else
+	{
+		if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+		{
+			FPreSkillUsedEventInfo PreSkillInfo;
+			PreSkillInfo.SkillUseEventInfo.Caster = Owner->GetOwner();
+			PreSkillInfo.SkillUseEventInfo.TargetLocation = Location;
+			PreSkillInfo.SkillUseEventInfo.Skill = this;
+
+			Callback->BroadcastPreSkillUsed(PreSkillInfo);
+
+			if (PreSkillInfo.bCancel)
+			{
+				Owner->NotifyOwner(PreSkillInfo.CancelReasonText);
+				return;
+			}
+		}
+
+		UseLocationAuthority(Location);
+
+		if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+		{
+			FSkillUsedEventInfo SkillInfo;
+			SkillInfo.Caster = Owner->GetOwner();
+			SkillInfo.TargetLocation = Location;
+			SkillInfo.Skill = this;
+
+			Callback->BroadcastSkillUsed(SkillInfo);
+		}
+	}
 }
 
 void USkillBase::UseTargetAuthority(AActor* Target)
@@ -293,26 +441,112 @@ void USkillBase::UseTargetInternal(AActor* Target)
 		return;
 	}
 
+	if (!CanTarget(Target, FVector(), OutUsabilityText))
+	{
+		Owner->NotifyOwner(OutUsabilityText);
+		return;
+	}
+
+	PayCost();
+
 	if (ChannelTime > 0.0f)
 	{
-		PayCost();
 		Owner->ChannelSkill(this, Target, FVector::ZeroVector);
 		SetOnCooldown();
 	}
 	else
 	{
+		if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+		{
+			FPreSkillUsedEventInfo PreSkillInfo;
+			PreSkillInfo.SkillUseEventInfo.Caster = Owner->GetOwner();
+			PreSkillInfo.SkillUseEventInfo.Target = Target;
+			PreSkillInfo.SkillUseEventInfo.Skill = this;
+
+			Callback->BroadcastPreSkillUsed(PreSkillInfo);
+
+			if (PreSkillInfo.bCancel)
+			{
+				Owner->NotifyOwner(PreSkillInfo.CancelReasonText);
+				return;
+			}
+		}
+
 		UseTargetAuthority(Target);
+		SetOnCooldown();
+
+		if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+		{
+			FSkillUsedEventInfo SkillInfo;
+			SkillInfo.Caster = Owner->GetOwner();
+			SkillInfo.Target = Target;
+			SkillInfo.Skill = this;
+
+			Callback->BroadcastSkillUsed(SkillInfo);
+		}
 	}
 }
 
 void USkillBase::UseTargetAfterChannel(AActor* Target)
 {
+	if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+	{
+		FPreSkillUsedEventInfo PreSkillInfo;
+		PreSkillInfo.SkillUseEventInfo.Caster = Owner->GetOwner();
+		PreSkillInfo.SkillUseEventInfo.Target = Target;
+		PreSkillInfo.SkillUseEventInfo.Skill = this;
+
+		Callback->BroadcastPreSkillUsed(PreSkillInfo);
+
+		if (PreSkillInfo.bCancel)
+		{
+			Owner->NotifyOwner(PreSkillInfo.CancelReasonText);
+			return;
+		}
+	}
+
 	UseTargetAuthority(Target);
+
+	if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+	{
+		FSkillUsedEventInfo SkillInfo;
+		SkillInfo.Caster = Owner->GetOwner();
+		SkillInfo.Target = Target;
+		SkillInfo.Skill = this;
+
+		Callback->BroadcastSkillUsed(SkillInfo);
+	}
 }
 
 void USkillBase::UseLocationAfterChannel(FVector Location)
 {
+	if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+	{
+		FPreSkillUsedEventInfo PreSkillInfo;
+		PreSkillInfo.SkillUseEventInfo.Caster = Owner->GetOwner();
+		PreSkillInfo.SkillUseEventInfo.TargetLocation = Location;
+		PreSkillInfo.SkillUseEventInfo.Skill = this;
+
+		Callback->BroadcastPreSkillUsed(PreSkillInfo);
+
+		if (PreSkillInfo.bCancel)
+		{
+			Owner->NotifyOwner(PreSkillInfo.CancelReasonText);
+			return;
+		}
+	}
+
 	UseLocationAuthority(Location);
+
+	if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+	{
+		FSkillUsedEventInfo SkillInfo;
+		SkillInfo.Caster = Owner->GetOwner();
+		SkillInfo.TargetLocation = Location;
+		SkillInfo.Skill = this;
+
+		Callback->BroadcastSkillUsed(SkillInfo);
+	}
 }
 
 void USkillBase::UseTargetMulticast_Implementation(AActor* Target, FVector_NetQuantize Location, FRotator Rotation)
@@ -321,9 +555,34 @@ void USkillBase::UseTargetMulticast_Implementation(AActor* Target, FVector_NetQu
 	GetOwnerCharacter()->OnSkillUse(this, ReconstructedTransform.GetLocation(), Target);*/
 }
 
-void USkillBase::SetOnCooldown()
+void USkillBase::SetOnCooldown(float CooldownOverride)
 {
-	Owner->SetSkillOnCooldown(this);
+	const float Now = GetWorld()->GetTimeSeconds();
+	float Cooldown = 0.f;
+
+	if (CooldownOverride >= 0)
+	{
+		Cooldown = CooldownOverride;
+	}
+	else
+	{
+		Cooldown = GetBaseCooldown();
+
+		if (UCallbackComponent* Callback = Owner->GetCallbackComponent())
+		{
+			FCooldownEventInfo Info;
+			Info.Skill = this;
+			Info.Cooldown = Cooldown;
+
+			Callback->BroadcastSkillOnCooldown(Info);
+			Cooldown = Info.Cooldown;
+		}
+	}
+
+	if (RemainingCooldown < Cooldown)
+	{
+		Owner->SetSkillOnCooldown(this, Now + Cooldown);
+	}
 }
 
 void USkillBase::SyncCooldown(float EndTimestamp)
@@ -383,9 +642,14 @@ bool USkillBase::GetCost(ESkillCost CostType, int32& OutAmount) const
 	return false;
 }
 
-FText USkillBase::GetFormattedSkillDescription_Implementation(bool bPreview) const
+void USkillBase::DisableSkill(float Duration)
 {
-	return FText::FromString("EMPTY_SKILL_DESCRIPTION");
+	SetOnCooldown(Duration);
+}
+
+FText USkillBase::GetFormattedSkillDescription_Implementation() const
+{
+	return DescriptionParser.ParseDescription(Description);
 }
 
 UWorld* USkillBase::GetWorld() const
@@ -393,13 +657,18 @@ UWorld* USkillBase::GetWorld() const
 	return Owner ? Owner->GetWorld() : nullptr;
 }
 
-void USkillBase::Begin(USkillComponent* InOwner)
+void USkillBase::Begin(USkillComponent* InOwner, bool bAutoEquip)
 {
 	Owner = InOwner;
+	bIsEquipped = bAutoEquip;
 
 	if (RangePreset != ERangePreset::None)
 	{
 		Range = UCoreBlueprintLibrary::GetRangeFromPreset(this, RangePreset);
+	}
+	else
+	{
+		Range = GetExplicitRange();
 	}
 
 	if (ACoreCharacter* Character = GetOwnerAsCharacter())

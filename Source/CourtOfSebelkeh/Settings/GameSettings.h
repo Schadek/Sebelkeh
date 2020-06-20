@@ -8,6 +8,7 @@
 #include "CourtOfSebelkeh/Skills/SkillDefinitions.h"
 #include "CourtOfSebelkeh/Damage/CoreDamageType.h"
 #include "CourtOfSebelkeh/Camera/ThirdPersonCamera.h"
+#include "CourtOfSebelkeh/Skills/Utility/AreaOfEffectActor.h"
 #include "GameSettings.generated.h"
 
 class USkillBase;
@@ -64,9 +65,15 @@ public:
 		TSubclassOf<UKnockdownActorState> KnockdownState = UKnockdownActorState::StaticClass();
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+		TSubclassOf<UDeadActorState> DeadState = UDeadActorState::StaticClass();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 		TSubclassOf<USacrificeDamageType> HealthSacrificeDamageType = USacrificeDamageType::StaticClass();
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 		TSubclassOf<AThirdPersonCamera> ThirdPersonCameraClass = AThirdPersonCamera::StaticClass();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+		TSubclassOf<AAreaOfEffectActor> AreaOfEffectActorClass = AAreaOfEffectActor::StaticClass();
 
 };

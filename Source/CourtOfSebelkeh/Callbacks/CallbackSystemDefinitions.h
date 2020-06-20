@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "CourtOfSebelkeh/Damage/DamageSystemDefinitions.h"
 #include "CourtOfSebelkeh/Stats/StatDefinitions.h"
+#include "CourtOfSebelkeh/Skills/SkillDefinitions.h"
 #include "CallbackSystemDefinitions.generated.h"
 
 class UBuff;
@@ -14,19 +15,81 @@ class UActorState;
 UENUM(BlueprintType)
 enum class ECallback : uint8
 {
+	CostCalculation,
 	PreDamageDealt,
 	DamageDealt,
 	PreDamageReceived,
 	DamageReceived,
-	EnchantmentAdded,
-	EnchantmentRemoved,
-	HexAdded,
-	HexRemoved,
+	PreHealReceived,
+	HealReceived,
+	PreHealApplied,
+	HealApplied,
+	PreBuffApplied,
+	PreBuffReceived,
+	BuffAdded,
+	BuffRemoved,
 	StatChanged,
 	SkillOnCooldown,
 	SkillChannel,
+	PreSkillUsed,
+	SkillUsed,
 	PreActorStateChanged,
+	ActorStateChanged,
 	Count
+};
+
+USTRUCT(BlueprintType)
+struct FCostCalculationEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		ESkillCost Type;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		USkillBase* Skill;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		int32 Amount;
+
+};
+
+USTRUCT(BlueprintType)
+struct FPreBuffReceivedEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UBuff* Buff;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Instigator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UObject* Source;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		float Duration;
+
+};
+
+USTRUCT(BlueprintType)
+struct FPreBuffAppliedEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UBuff* Buff;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Instigator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UObject* Source;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		float Duration;
+
 };
 
 USTRUCT(BlueprintType)
@@ -36,6 +99,13 @@ struct FBuffEventInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UBuff* Buff;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Instigator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UObject* Source;
+
 };
 
 USTRUCT(BlueprintType)
@@ -97,6 +167,79 @@ struct FSkillChannelEventInfo
 };
 
 USTRUCT(BlueprintType)
+struct FSkillUsedEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		USkillBase* Skill;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Caster;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Target;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FVector TargetLocation;
+
+};
+
+USTRUCT(BlueprintType)
+struct FPreSkillUsedEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FSkillUsedEventInfo SkillUseEventInfo;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		bool bCancel = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FText CancelReasonText;
+
+};
+
+USTRUCT(BlueprintType)
+struct FPreDamageHealedEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		int32 Amount;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Healer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Target;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UObject* Source;
+
+};
+
+USTRUCT(BlueprintType)
+struct FDamageHealedEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		int32 Amount;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Healer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Target;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UObject* Source;
+
+};
+
+USTRUCT(BlueprintType)
 struct FPreActorStateEventInfo
 {
 	GENERATED_BODY();
@@ -108,6 +251,19 @@ struct FPreActorStateEventInfo
 		AActor* Instigator;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		bool bPreventChange;
+		bool bPreventChange = false;
+
+};
+
+USTRUCT(BlueprintType)
+struct FActorStateEventInfo
+{
+	GENERATED_BODY();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		TSubclassOf<UActorState> NewStateClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		AActor* Instigator;
 
 };

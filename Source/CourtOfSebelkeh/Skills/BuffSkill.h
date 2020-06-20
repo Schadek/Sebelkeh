@@ -16,10 +16,18 @@ class COURTOFSEBELKEH_API UBuffSkill : public USkillBase
 {
 	GENERATED_BODY()
 
+public:
+
+	UBuffSkill();
+
 protected:
 
+	UFUNCTION()
+		FString ParseDuration(const FString& Keyword) const;
+
+	virtual void Begin(USkillComponent* InOwner, bool bAutoEquip) override;
 	virtual void UseTargetAuthority(AActor* Target) override;
-	virtual void PayCostSpecific(UStatComponent* StatComponent, ESkillCost CostType, int32 Amount) override;
+	virtual void PayCostSpecific(UStatComponent* StatComponent, ESkillCost CostType, int32& Amount) override;
 
 	UFUNCTION(BlueprintNativeEvent)
 		float GetBuffDuration() const;
@@ -36,6 +44,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, meta = (EditCondition = "bUseFixedBuffDuration"))
 		float FixedDuration = -1.f;
 
+	UPROPERTY(EditDefaultsOnly)
+		EBuffSkillTargetLogic TargetLogic;
+
+	UPROPERTY(EditDefaultsOnly)
+		ERangePreset BuffRangePreset;
+
+	UPROPERTY(EditDefaultsOnly)
+		float BuffRange;
+
 	TMap<EStat, int32> MaintenanceCosts;
+
+#if WITH_EDITOR
+	virtual bool CanEditChange(const FProperty* InProperty) const override;
+#endif
 
 };

@@ -6,6 +6,8 @@
 #include "CourtOfSebelkeh/Skills/SkillDefinitions.h"
 #include "CourtOfSebelkeh/Stats/StatDefinitions.h"
 #include "CourtOfSebelkeh/Meta/Factions/FactionDefinitions.h"
+#include "CourtOfSebelkeh/Utility/DescriptionParser.h"
+#include "GameplayTagContainer.h"
 #include "SkillBase.generated.h"
 
 class UStatComponent;
@@ -23,11 +25,13 @@ class COURTOFSEBELKEH_API USkillBase : public UObject
 
 public:
 
+	USkillBase();
+
 	virtual UWorld* GetWorld() const override;
 
-	void Begin(USkillComponent* InOwner);
-	void End();
-	void Tick(float DeltaSeconds);
+	virtual void Begin(USkillComponent* InOwner, bool bAutoEquip);
+	virtual void End();
+	virtual void Tick(float DeltaSeconds);
 
 	UFUNCTION(BlueprintCallable)
 		virtual void Select();
@@ -41,7 +45,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 		bool IsElite() const { return bIsElite; }
 	UFUNCTION(BlueprintCallable)
-		uint8 GetPossibleTargets() const { return PossibleTargets; }
+		int32 GetPossibleTargets() const { return PossibleTargets; }
 	UFUNCTION(BlueprintCallable)
 		TSubclassOf<USkillAttribute> GetAttribute() const { return Attribute; }
 	UFUNCTION(BlueprintCallable, Category = "Utility")
@@ -53,7 +57,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Utility")
 		float GetChannelTime() const { return ChannelTime; }
 	UFUNCTION(BlueprintCallable, Category = "Utility")
-		ESkillType GetSkillType() const { return Type; }
+		FGameplayTag GetSkillType() const { return Type; }
+	UFUNCTION(BlueprintCallable, Category = "Utility")
+		bool HasCostType(ESkillCost CostType) const { return Costs.Contains(CostType); }
 
 	/**
 	* Triggers once the player has selected the skill. Used e.g. for range indicators.
@@ -87,18 +93,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Activation")
 		void UseLocation(FVector Location);
 
-	/**
-	* Gets the ingame description of the skill. Will be shown in tooltips and hero descriptions.
-	* Make sure to keep the description up-to-date and determine its context using the skill's current state
-	* You can use RichText commands to highlight parts of the text:
-	* Color: <span Color=RRGGBBAA></>
-	* Style: <span Style=Normal/Italic/Bold>
-	* UMobaLibrary::GetRichTextFormat() gives you an easy way to use the richtext features.
-	* @param bPreview		If the description should be formatted to fit a skill not yet equipped
-	* @return:				The formatted text fed into the text box
-	*/
+
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Description")
-		FText GetFormattedSkillDescription(bool bPreview) const;
+		FText GetFormattedSkillDescription() const;
 
 	/**
 	* Called when the local player hovers over this skill's icon. Use this for previewing range
@@ -143,6 +140,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Usability")
 		bool IsUsable(FText& UsabilityMessage) const;
 
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Usability")
+		bool CanTarget(const AActor* Target, const FVector& Location, FText& OutUsabilityMessage) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Cooldown")
 		bool IsActive() const { return bIsActive; }
 
@@ -157,49 +157,61 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Costs")
 		bool GetCost(ESkillCost CostType, int32& OutAmount) const;
 
-	void SetOnCooldown();
+	UFUNCTION(BlueprintCallable, Category = "Cooldown")
+		void DisableSkill(float Duration);
+
+	void SetOnCooldown(float CooldownOverride = -1.f);
 	void SyncCooldown(float EndTimestamp);
 
 protected:
+
+	UFUNCTION()
+		FString DescriptionParser_GetAttributeRange(const FString& ArrayIndexKeyword, const TArray<int32>& Array) const;
+
+	UFUNCTION()
+		FString DescriptionParser_GetAttribute(const FString& ArrayIndexKeyword, const TArray<int32>& Array) const;
+
+	UFUNCTION()
+		FString DescriptionParser_GetAttributeName(const FString& Keyword);
 
 	/** Whether this skill can be interacted with in the skill bar. Usually only false for empty 'fake' skills */
 	UPROPERTY(EditDefaultsOnly, Category = "Information|Internal")
 		bool bIsActive = true;
 
+	/** The name of the skill. Used by default in the title line of skill tooltips */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Information")
+		FText SkillName;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Information")
-		ESkillType Type;
+		FGameplayTag Type;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Information")
+		TSubclassOf<USkillAttribute> Attribute;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Information")
 		bool bIsElite;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Information", Meta = (Bitmask, BitmaskEnum = "ESkillTarget"))
-		uint8 PossibleTargets;
+	/** General information about which stat gets consumed when using this skill */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage")
+		TMap<ESkillCost, int32> Costs;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage")
+		float BaseCooldown;
+
+	/** Class of the skill selector spawned after selecting this skill. Use SetupSkillSelector event to */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage")
+		TSubclassOf<ASkillSelector> SkillSelectorTemplate;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Usage", Meta = (Bitmask, BitmaskEnum = "ESkillTarget"))
+		int32 PossibleTargets;
 
 	/** The icon displayed in the UI. Change this at runtime under special circumstances */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Information")
 		UTexture2D* Icon;
 
-	/** The name of the skill. Used by default in the title line of skill tooltips */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Information")
-		FText SkillName;
-
 	/** A color associated with this skill. Can be used for many purposes, nothing specific implemented yet */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Information")
 		FLinearColor SkillColor;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Information")
-		TSubclassOf<USkillAttribute> Attribute;
-
-	/** Class of the skill selector spawned after selecting this skill. Use SetupSkillSelector event to */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Selector")
-		TSubclassOf<ASkillSelector> SkillSelectorTemplate;
-
-	/** General information about which stat gets consumed when using this skill */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Information")
-		TMap<ESkillCost, int32> Costs;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Information")
-		float BaseCooldown;
 
 	/* Logic to execute when using this skill on a target character */
 	virtual void UseTargetInternal(AActor* Target);
@@ -241,7 +253,7 @@ protected:
 
 	/** Pay the costs of the skill */
 	virtual void PayCost();
-	virtual void PayCostSpecific(UStatComponent* StatComponent, ESkillCost CostType, int32 Amount);
+	virtual void PayCostSpecific(UStatComponent* StatComponent, ESkillCost CostType, int32& Amount);
 	virtual bool CanPayCost() const;
 	virtual bool CanPaySpecificCost(UStatComponent* StatComponent, ESkillCost CostType, int32 Amount) const;
 
@@ -268,40 +280,56 @@ protected:
 
 public:
 
-	/** Returns the range this skill has currently */
-	float GetRange() const { return Range; }
+	UFUNCTION(BlueprintCallable, Category = "Range")
+		float GetRange() const { return Range; }
+
+	UFUNCTION(BlueprintNativeEvent, Category = "Range")
+		float GetExplicitRange() const;
+
 	/** Sets the range this skill has */
 	void SetRange(float NewRange) { Range = NewRange; }
 
+	UFUNCTION(BlueprintCallable)
+		bool CanBeInterrupted() const { return bCanBeInterrupted; }
+
+	UFUNCTION(BlueprintCallable)
+		bool IsEasyToInterrupt() const { return bCanBeInterrupted && bIsEasyToInterrupt; }
+
 protected:
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Range")
-		ERangePreset RangePreset;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage")
+		ERangePreset RangePreset = ERangePreset::Earshot;
 
-	/**
-	* As most skills have a limited range use this value for default functionality such as
-	* range indicators when being hovered over or when the skill is selected
-	*/
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Range")
-		float Range;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Information", meta = (MultiLine))
+		FText Description;
+
+	DescriptionParser DescriptionParser;
 
 	/** If true a range indicator will be shown automatically when selecting this skill */
-	UPROPERTY(EditDefaultsOnly, Category = "Select")
+	UPROPERTY(EditDefaultsOnly, Category = "Usage")
 		bool bShowRangeOnSelect = true;
 
 	/** Values greater than 0.0 will delay the skill by set duration */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Channel")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage")
 		float ChannelTime = 0.25f;
 
 	/** Whether the channeling character is stunned while channeling the spell. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Channel")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage")
 		bool bStunnedWhileChanneling;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage")
+		bool bCanBeInterrupted = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Usage", meta = (EditCondition = "bCanBeInterrupted"))
+		bool bIsEasyToInterrupt = false;
 
 	UPROPERTY()
 		USkillComponent* Owner;
 
+	float Range;
 	bool bIsWalkingTowardsTarget;
 	bool bIsWalkingTowardsLocation;
+	bool bIsEquipped;
 
 	/** Reference to this skill's selector instance. Created after local selection by the player */
 	UPROPERTY(BlueprintReadOnly, Category = "SkillSelector")

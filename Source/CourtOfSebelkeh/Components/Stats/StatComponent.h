@@ -21,6 +21,12 @@ public:
 	UStatComponent();
 
 	UFUNCTION(BlueprintCallable)
+		int32 Heal(int32 Value, AActor* Healer, UObject* Source);
+
+	UFUNCTION(BlueprintCallable)
+		bool Resurrect(int32 Health, int32 Energy, AActor* Instigator);
+
+	UFUNCTION(BlueprintCallable)
 		void AddStat(EStat Type, int32 Value);
 
 	UFUNCTION(BlueprintCallable)

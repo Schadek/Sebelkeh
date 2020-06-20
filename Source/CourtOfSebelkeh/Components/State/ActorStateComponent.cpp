@@ -64,6 +64,7 @@ void UActorStateComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CallbackComponent = GetOwner()->FindComponentByClass<UCallbackComponent>();
+	SetState(nullptr);
 }
 
 void UActorStateComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

@@ -4,10 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
+#include "CourtOfSebelkeh/Interfaces/CallbackListener.h"
 #include "ActorStateDefinitions.generated.h"
 
 class ACharacter;
 class ACoreCharacter;
+class UCallbackComponent;
 class UActorStateComponent;
 class USkillComponent;
 class USkillBase;
@@ -45,18 +47,28 @@ protected:
 };
 
 UCLASS(Blueprintable, BlueprintType)
-class COURTOFSEBELKEH_API UChannelingActorState : public UActorState
+class COURTOFSEBELKEH_API UChannelingActorState
+	: public UActorState
+	, public ICallbackListener
 {
 	GENERATED_BODY()
 
 public:
 
+	void SetEasilyInterruptable(UCallbackComponent* Callback);
 	void SetChanneledSkill(USkillBase* Skill) { ChanneledSkill = Skill; }
 	void SetDuration(float Duration) { EndTimestamp = BeginTimestamp + Duration; }
 	float GetDuration() const { return GetWorld()->GetTimeSeconds() - BeginTimestamp; }
 	void EnableEndOnMove();
 
+	UFUNCTION(BlueprintCallable)
+		USkillBase* GetChanneledSkill() const { return ChanneledSkill; }
+
 protected:
+
+	// ICallbackListener
+	virtual void OnDamageReceived_Implementation(const UCallbackComponent* Callback, const FDamageEventInfo& Info) override;
+	// ~ICallbackListener
 
 	virtual void Begin(UActorStateComponent* Owner, UActorState* OldState) override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -75,6 +87,8 @@ protected:
 		USkillComponent* SkillComponent;
 	UPROPERTY()
 		USkillBase* ChanneledSkill;
+	UPROPERTY()
+		UCallbackComponent* CallbackComponent;
 
 	float BeginTimestamp;
 	float EndTimestamp;
@@ -113,5 +127,13 @@ class COURTOFSEBELKEH_API UAttackingActorState : public UActorState
 public:
 
 	virtual void End(UActorState* NewState) override;
+
+};
+
+UCLASS(Blueprintable, BlueprintType)
+class COURTOFSEBELKEH_API UDeadActorState : public UActorState
+{
+	GENERATED_BODY()
+
 
 };
